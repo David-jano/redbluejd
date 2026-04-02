@@ -5,13 +5,17 @@ import { supabase } from "@/lib/supabase";
 import { FaThumbsUp } from "react-icons/fa";
 
 interface ArticleLikeButtonProps {
-  articleId: string;
+  contentId: string | number; // renamed from articleId
+  contentType: string; // new prop
   initialCount: number;
+  onLikeChange?: (newCount: number) => void; // optional callback
 }
 
-export default function ArticleLikeButton({ 
-  articleId, 
-  initialCount 
+export default function ArticleLikeButton({
+  contentId,
+  contentType,
+  initialCount,
+  onLikeChange,
 }: ArticleLikeButtonProps) {
   const [likeCount, setLikeCount] = useState(initialCount);
   const [hasLiked, setHasLiked] = useState(false);
@@ -24,128 +28,82 @@ export default function ArticleLikeButton({
     try {
       let storedDeviceId = localStorage.getItem("articleLikeDeviceId");
       if (!storedDeviceId) {
-        // Generate a unique device ID
         storedDeviceId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         localStorage.setItem("articleLikeDeviceId", storedDeviceId);
       }
       setDeviceId(storedDeviceId);
-    } catch (err) {
-      console.error("Error accessing localStorage:", err);
-      // Fallback to a timestamp-based ID if localStorage fails
-      const fallbackId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      setDeviceId(fallbackId);
+    } catch {
+      setDeviceId(
+        `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      );
     }
   }, []);
 
-  // Check if this device has liked this article
+  // Check if this device has liked this content
   useEffect(() => {
     const checkDeviceLike = async () => {
-      if (!deviceId || !articleId) return;
-      
+      if (!deviceId || !contentId) return;
       try {
         const { data, error: fetchError } = await supabase
-          .from("article_likes")
+          .from("content_likes")
           .select("id")
-          .eq("article_id", articleId)
+          .eq("content_id", contentId)
+          .eq("content_type", contentType)
           .eq("device_id", deviceId)
           .maybeSingle();
 
-        if (fetchError) {
-          console.error("Error checking like status:", fetchError.message);
-          return;
-        }
-
-        if (data) {
-          setHasLiked(true);
-        }
+        if (fetchError) console.error(fetchError.message);
+        if (data) setHasLiked(true);
       } catch (err) {
-        console.error("Unexpected error checking like:", err);
+        console.error(err);
       }
     };
 
-    if (deviceId && articleId) {
-      checkDeviceLike();
-    }
-  }, [articleId, deviceId]);
+    if (deviceId && contentId) checkDeviceLike();
+  }, [deviceId, contentId, contentType]);
 
   const handleLike = async () => {
-    if (isLoading) return;
-    
-    if (!deviceId) {
-      setError("Unable to identify device");
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
+    if (isLoading || !deviceId) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
       if (hasLiked) {
-        // Unlike - delete the like record using device_id
+        // Unlike
         const { error: deleteError } = await supabase
-          .from("article_likes")
+          .from("content_likes")
           .delete()
-          .eq("article_id", articleId)
+          .eq("content_id", contentId)
+          .eq("content_type", contentType)
           .eq("device_id", deviceId);
+        if (deleteError) throw deleteError;
 
-        if (deleteError) {
-          console.error("Error unliking:", deleteError);
-          setError(`Failed to unlike: ${deleteError.message}`);
-          return;
-        }
-
-        setLikeCount(prev => Math.max(0, prev - 1));
+        const newCount = Math.max(0, likeCount - 1);
+        setLikeCount(newCount);
         setHasLiked(false);
+        onLikeChange?.(newCount);
       } else {
-        // First, check if there's already a like from this device
-        const { data: existingLike, error: checkError } = await supabase
-          .from("article_likes")
-          .select("id")
-          .eq("article_id", articleId)
-          .eq("device_id", deviceId)
-          .maybeSingle();
-
-        if (checkError) {
-          console.error("Error checking existing like:", checkError);
-        }
-
-        if (existingLike) {
-          setHasLiked(true);
-          setIsLoading(false);
-          return;
-        }
-
-        // Insert new like with both device_id and user_name (set to device_id for consistency)
+        // Like
         const { error: insertError } = await supabase
-          .from("article_likes")
+          .from("content_likes")
           .insert({
-            article_id: articleId,
+            content_id: contentId,
+            content_type: contentType,
             device_id: deviceId,
-            user_name: deviceId, // Set user_name to device_id to satisfy the unique constraint
+            user_name: deviceId,
             created_at: new Date().toISOString(),
           });
+        if (insertError) throw insertError;
 
-        if (insertError) {
-          console.error("Error liking:", insertError);
-          
-          // Check if it's a unique constraint violation
-          if (insertError.code === "23505") {
-            // Unique violation - already liked
-            setHasLiked(true);
-            setError(null);
-          } else {
-            setError(`Failed to like: ${insertError.message}`);
-          }
-          return;
-        }
-
-        setLikeCount(prev => prev + 1);
+        const newCount = likeCount + 1;
+        setLikeCount(newCount);
         setHasLiked(true);
+        onLikeChange?.(newCount);
       }
-    } catch (err) {
-      console.error("Unexpected error in handleLike:", err);
-      setError(`Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Unexpected error");
     } finally {
       setIsLoading(false);
     }
@@ -161,13 +119,11 @@ export default function ArticleLikeButton({
             ? "bg-blue-500 text-white hover:bg-blue-600"
             : "bg-gray-100 text-gray-700 hover:bg-gray-200"
         } disabled:opacity-50 disabled:cursor-not-allowed`}
-        aria-label={hasLiked ? "Unlike this article" : "Like this article"}
       >
         <FaThumbsUp className={hasLiked ? "fill-current" : ""} />
         <span>{likeCount}</span>
       </button>
-      
-      {/* Error Tooltip */}
+
       {error && (
         <div className="absolute top-full left-0 mt-1 z-10 bg-red-500 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
           {error}

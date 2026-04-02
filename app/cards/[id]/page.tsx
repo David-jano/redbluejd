@@ -216,7 +216,11 @@ export default async function CardDetailPage({ params }: Props) {
 
         {/* Article Like Button and Social Media Icons */}
         <div className="flex items-center space-x-4">
-          <ArticleLikeButton articleId={id} initialCount={initialLikeCount} />
+          <ArticleLikeButton
+            contentId={id}
+            contentType="articles" // must provide this
+            initialCount={initialLikeCount}
+          />
 
           {/* Social Media Icons */}
           <div className="flex space-x-3">
