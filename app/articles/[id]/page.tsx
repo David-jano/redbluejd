@@ -3,23 +3,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import {
-  FaHome,
-  FaInfoCircle,
-  FaVideo,
-  FaBook,
-  FaSchool,
-  FaEnvelope,
-  FaLaughBeam,
-  FaComments,
-  FaBookOpen,
-  FaHeartbeat,
-  FaUserFriends,
-  FaPaintBrush,
-  FaShoppingBag,
-  FaFolder,
-  FaFlask,
-} from "react-icons/fa";
+import { FaHome, FaComments } from "react-icons/fa";
+import ArticleComments from "@/app/componets/ArticleComments";
+import ArticleLikeButton from "@/app/componets/ArticleLikeButton";
 
 // Type definitions
 interface Article {
@@ -31,6 +17,8 @@ interface Article {
   image_url: string;
   description?: string;
   content: string;
+  comment_count?: number;
+  like_count?: number;
 }
 
 interface Props {
@@ -39,7 +27,6 @@ interface Props {
 
 // SEO Metadata generation
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  // Await the params promise
   const { id } = await params;
 
   const { data, error } = await supabase
@@ -71,7 +58,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       images: [data.image_url],
     },
     metadataBase: new URL(
-      process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+      process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
     ),
   };
 }
@@ -83,7 +70,7 @@ export async function generateStaticParams() {
   if (error) {
     console.error(
       "Error generating static params:",
-      error.message || String(error)
+      error.message || String(error),
     );
     return [];
   }
@@ -107,7 +94,6 @@ function logServerError(context: string, error: any) {
 }
 
 export default async function ArticleDetail({ params }: Props) {
-  // Await the params promise
   const { id } = await params;
 
   // Fetch the main article with better error handling
@@ -120,11 +106,8 @@ export default async function ArticleDetail({ params }: Props) {
   // Enhanced error handling
   if (error) {
     if (error.code === "PGRST116") {
-      // Record not found
       return notFound();
     }
-
-    // Safe error logging for Server Components
     logServerError("Fetching article", error);
     return notFound();
   }
@@ -132,6 +115,64 @@ export default async function ArticleDetail({ params }: Props) {
   if (!article) {
     return notFound();
   }
+
+  // In your article detail page, update the comment count fetching and comments section:
+
+  // In your article detail page, replace the comment count fetching with:
+
+  // Fetch comment counts from article_comments_new table
+  let commentCount = 0;
+  try {
+    const { count, error: commentCountError } = await supabase
+      .from("article_comments_new")
+      .select("*", { count: "exact", head: true })
+      .eq("article_id", id);
+
+    if (commentCountError) {
+      console.error("Error fetching comment count:", commentCountError.message);
+    } else if (count !== null) {
+      commentCount = count;
+    }
+  } catch (error) {
+    console.error("Unexpected error fetching comment count:", error);
+  }
+
+  {
+    /* Comments Section */
+  }
+  <ArticleComments articleId={article.id} />;
+
+  // Fetch like counts from article_likes table
+  let likeCount = 0;
+  try {
+    const { count, error: likeCountError } = await supabase
+      .from("article_likes")
+      .select("*", { count: "exact", head: true })
+      .eq("article_id", id);
+
+    if (likeCountError) {
+      console.error(
+        "Error fetching like count:",
+        JSON.stringify(likeCountError, null, 2),
+      );
+      if (likeCountError.code === "42P01") {
+        console.warn(
+          "Table 'article_likes' doesn't exist yet. Please create it.",
+        );
+      }
+    } else if (count !== null) {
+      likeCount = count;
+    }
+  } catch (error) {
+    console.error("Unexpected error fetching like count:", error);
+  }
+
+  // Add counts to article
+  const articleWithCounts = {
+    ...article,
+    comment_count: commentCount,
+    like_count: likeCount,
+  };
 
   // Fetch other articles for the "More Stories" section
   let moreArticles: Article[] = [];
@@ -186,7 +227,7 @@ export default async function ArticleDetail({ params }: Props) {
         {article.title}
       </h1>
 
-      {/* Author, Label, Date & Social Icons */}
+      {/* Author, Label, Date, Like Button & Social Icons */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div className="flex items-center flex-wrap gap-2 text-sm text-gray-600">
           <span>
@@ -204,56 +245,91 @@ export default async function ArticleDetail({ params }: Props) {
               day: "numeric",
             })}
           </span>
+          <span>•</span>
+          <span className="flex items-center gap-1 text-gray-500">
+            <FaComments size={12} />
+            {articleWithCounts.comment_count} comments
+          </span>
         </div>
 
-        {/* Social Media Icons */}
-        <div className="flex items-center space-x-4">
-          <div className="flex space-x-3">
-            <a
-              href="#"
-              className="text-gray-600 hover:text-blue-600 transition-colors"
-              aria-label="Facebook"
-            >
-              <Image
-                src="/facebook.svg"
-                width={20}
-                height={20}
-                alt="Facebook"
-              />
-            </a>
-            <a
-              href="#"
-              className="text-gray-600 hover:text-red-600 transition-colors"
-              aria-label="YouTube"
-            >
-              <Image src="/youtube.svg" width={20} height={20} alt="YouTube" />
-            </a>
-            <a
-              href="#"
-              className="text-gray-600 hover:text-black transition-colors"
-              aria-label="X (Twitter)"
-            >
-              <Image src="/x.svg" width={20} height={20} alt="X (Twitter)" />
-            </a>
-            <a
-              href="#"
-              className="text-gray-600 hover:text-pink-600 transition-colors"
-              aria-label="TikTok"
-            >
-              <Image src="/tiktok.svg" width={20} height={20} alt="TikTok" />
-            </a>
-            <a
-              href="#"
-              className="text-gray-600 hover:text-purple-600 transition-colors"
-              aria-label="Instagram"
-            >
-              <Image
-                src="/instagram.svg"
-                width={20}
-                height={20}
-                alt="Instagram"
-              />
-            </a>
+        {/* Like Button and Social Icons */}
+        <div className="flex items-center gap-4">
+          {/* Like Button */}
+          <ArticleLikeButton
+            articleId={article.id}
+            initialCount={articleWithCounts.like_count}
+          />
+
+          {/* Social Media Icons */}
+          <div className="flex items-center space-x-4">
+            <div className="flex space-x-3">
+              <a
+                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+                  `${process.env.NEXT_PUBLIC_SITE_URL}/articles/${article.id}`,
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-600 hover:text-blue-600 transition-colors"
+                aria-label="Facebook"
+              >
+                <Image
+                  src="/facebook.svg"
+                  width={20}
+                  height={20}
+                  alt="Facebook"
+                />
+              </a>
+              <a
+                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(article.title)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-600 hover:text-red-600 transition-colors"
+                aria-label="YouTube"
+              >
+                <Image
+                  src="/youtube.svg"
+                  width={20}
+                  height={20}
+                  alt="YouTube"
+                />
+              </a>
+              <a
+                href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(
+                  `${process.env.NEXT_PUBLIC_SITE_URL}/articles/${article.id}`,
+                )}&text=${encodeURIComponent(article.title)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-600 hover:text-black transition-colors"
+                aria-label="X (Twitter)"
+              >
+                <Image src="/x.svg" width={20} height={20} alt="X (Twitter)" />
+              </a>
+              <a
+                href={`https://www.tiktok.com/search?q=${encodeURIComponent(article.title)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-600 hover:text-pink-600 transition-colors"
+                aria-label="TikTok"
+              >
+                <Image src="/tiktok.svg" width={20} height={20} alt="TikTok" />
+              </a>
+              <a
+                href={`https://www.instagram.com/?url=${encodeURIComponent(
+                  `${process.env.NEXT_PUBLIC_SITE_URL}/articles/${article.id}`,
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-600 hover:text-purple-600 transition-colors"
+                aria-label="Instagram"
+              >
+                <Image
+                  src="/instagram.svg"
+                  width={20}
+                  height={20}
+                  alt="Instagram"
+                />
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -311,7 +387,7 @@ export default async function ArticleDetail({ params }: Props) {
             <div className="flex space-x-2">
               <a
                 href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
-                  `${process.env.NEXT_PUBLIC_SITE_URL}/articles/${article.id}`
+                  `${process.env.NEXT_PUBLIC_SITE_URL}/articles/${article.id}`,
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -328,7 +404,7 @@ export default async function ArticleDetail({ params }: Props) {
               </a>
               <a
                 href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(
-                  `${process.env.NEXT_PUBLIC_SITE_URL}/articles/${article.id}`
+                  `${process.env.NEXT_PUBLIC_SITE_URL}/articles/${article.id}`,
                 )}&text=${encodeURIComponent(article.title)}`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -345,7 +421,7 @@ export default async function ArticleDetail({ params }: Props) {
               </a>
               <a
                 href={`https://wa.me/?text=${encodeURIComponent(
-                  `${article.title} - ${process.env.NEXT_PUBLIC_SITE_URL}/articles/${article.id}`
+                  `${article.title} - ${process.env.NEXT_PUBLIC_SITE_URL}/articles/${article.id}`,
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -366,6 +442,9 @@ export default async function ArticleDetail({ params }: Props) {
         </div>
       </div>
 
+      {/* Comments Section - Integrated with your table structure */}
+      <ArticleComments articleId={article.id} />
+
       {/* More Stories Section */}
       <section aria-labelledby="more-stories-heading" className="mt-16">
         <h2
@@ -380,7 +459,7 @@ export default async function ArticleDetail({ params }: Props) {
             {moreArticles.map((article) => (
               <article
                 key={article.id}
-                className="bg-white  rounded-lg  hover:shadow-md transition-shadow duration-300 p-4 group"
+                className="bg-white rounded-lg hover:shadow-md transition-shadow duration-300 p-4 group"
               >
                 <div className="relative w-full h-40 rounded-md overflow-hidden mb-4">
                   <Image

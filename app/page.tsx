@@ -6,6 +6,7 @@ import WhatsAppFloatingButton from "./componets/WhatsAppFloatingButton";
 import HeroSection from "./componets/HeroSection";
 import VideoGrid from "./componets/VideoGrid";
 import ShortLinksSection from "./componets/ShortLinksSection"
+import SubfooterCardsSection from "./componets/SubfooterCards";
 
 export default function Home() {
   return (
@@ -19,7 +20,7 @@ export default function Home() {
       
       {/*=================================titles Section=======================================================*/}
       <ArticleGrid />
-      <SmallCardsSection/>
+      <SubfooterCardsSection/>
       <WhatsAppFloatingButton/>
     </>
   );

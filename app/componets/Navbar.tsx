@@ -184,8 +184,8 @@ export default function Navbar() {
               : "translate-x-0 opacity-100"
           }`}
         >
-          <Link href="/igiciro" className={linkClass}>
-            <FaShoppingBag /> IGURIRO
+          <Link href="/iguriro" className={linkClass}>
+            <FaShoppingBag /> eGURIRO
           </Link>
           <Link href="/ishuri" className={linkClass}>
             <FaSchool /> ISHURI

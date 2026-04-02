@@ -1,153 +1,361 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import Image from 'next/image';
-import { Search, Eye, User, BookOpen, Bookmark, Share2, ChevronDown, Grid, List, Download, Play } from 'lucide-react';
+import { useState, useEffect } from "react";
+import Image from "next/image";
+import { supabase } from "@/lib/supabase";
+import {
+  Search,
+  Eye,
+  User,
+  BookOpen,
+  Bookmark,
+  Share2,
+  ChevronDown,
+  Grid,
+  List,
+  Download,
+  Play,
+  Loader2,
+  Calendar,
+} from "lucide-react";
+// NEW IMPORTS
+import { FaHeart, FaComment } from "react-icons/fa";
+import ContentCommentsModal from "../componets/ContentCommentsModal";
+import CardLikeButton from "../componets/CardLikeButton";
 
 interface Book {
-  id: string;
+  id: number;
   title: string;
   author: string;
-  publishedDate: string;
+  published_date: string;
   views: number;
   description: string;
-  coverImage: string;
+  cover_image: string;
   genre: string[];
   pages: number;
   language: string;
-  isbn: string;
-  publisher: string;
-  isFeatured?: boolean;
-  isNew?: boolean;
+  isbn: string | null;
+  publisher: string | null;
+  is_featured: boolean | null;
+  is_new: boolean | null;
+  pdf_url: string | null;
+  // NEW: Add comment and like counts
+  comment_count?: number;
+  like_count?: number;
 }
 
+const SimplePDFViewer = ({
+  item,
+  onClose,
+  onViewTracked,
+}: {
+  item: Book;
+  onClose: () => void;
+  onViewTracked?: () => void;
+}) => {
+  const pdfUrl = item.pdf_url || "";
+
+  // Track view when PDF viewer opens
+  useEffect(() => {
+    if (onViewTracked) {
+      onViewTracked();
+    }
+  }, [onViewTracked]);
+
+  return (
+    <div className="fixed inset-0 bg-white z-50 flex flex-col">
+      <div className="bg-white border-b border-stone-200 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-stone-100 rounded-full"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+          <h2 className="text-lg font-bold">{item.title}</h2>
+        </div>
+        {pdfUrl && (
+          <a
+            href={pdfUrl}
+            download
+            className="p-2 hover:bg-stone-100 rounded-full flex items-center gap-2 text-stone-700 hover:text-stone-900"
+            title="Download PDF"
+          >
+            <Download className="w-5 h-5" />
+            <span className="text-sm hidden sm:inline">Download</span>
+          </a>
+        )}
+      </div>
+      <div className="flex-1 bg-stone-100">
+        {pdfUrl ? (
+          <iframe
+            src={pdfUrl}
+            className="w-full h-full"
+            title={item.title}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full text-stone-500">
+            PDF not available
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default function BooksPage() {
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedGenre, setSelectedGenre] = useState('all');
-  const [sortBy, setSortBy] = useState('newest');
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedGenre, setSelectedGenre] = useState("all");
+  const [sortBy, setSortBy] = useState("newest");
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
-  const [showActions, setShowActions] = useState<string | null>(null);
+  const [selectedPDF, setSelectedPDF] = useState<Book | null>(null);
+  const [showActions, setShowActions] = useState<number | null>(null);
+
+  // NEW: State for comments modal
+  const [commentsModalOpen, setCommentsModalOpen] = useState(false);
+  const [selectedCommentItem, setSelectedCommentItem] = useState<Book | null>(null);
+
+  // State for fetched data
+  const [books, setBooks] = useState<Book[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalBooks: 0,
+    totalViews: 0,
+    totalGenres: 0,
+    totalLikes: 0,
+  });
 
   const genres: string[] = [
-    'all', 'fiction', 'non-fiction', 'science', 'technology', 
-    'history', 'biography', 'fantasy', 'mystery', 'romance'
+    "all",
+    "fiction",
+    "non-fiction",
+    "science",
+    "technology",
+    "history",
+    "biography",
+    "fantasy",
+    "mystery",
+    "romance",
   ];
 
-  const books: Book[] = [
-    {
-      id: '1',
-      title: 'The Quality of Good Things',
-      author: 'AYORAMI Adelayo',
-      publishedDate: '2020-08-13',
-      views: 12543,
-      description: 'A novel about a library that contains books that let you experience the lives you could have lived.',
-      coverImage: '/images/books/goodthinks.webp',
-      genre: ['fiction', 'fantasy'],
-      pages: 304,
-      language: 'English',
-      isbn: '978-0525559474',
-      publisher: 'Penguin Books',
-      isFeatured: true
-    },
-    {
-      id: '2',
-      title: 'The Rise of the African Novel',
-      author: 'MUKOMA wa Ngogi',
-      publishedDate: '2018-10-16',
-      views: 89234,
-      description: 'Tiny Changes, Remarkable Results: An Easy & Proven Way to Build Good Habits & Break Bad Ones',
-      coverImage: '/images/books/rise.jpg',
-      genre: ['non-fiction', 'self-help'],
-      pages: 320,
-      language: 'English',
-      isbn: '978-0735211292',
-      publisher: 'Avery',
-      isFeatured: true
-    },
-    {
-      id: '3',
-      title: 'Hunger Eats a Man',
-      author: 'NKOSINATHI Sithole',
-      publishedDate: '2021-05-04',
-      views: 45678,
-      description: 'A lone astronaut must save the earth from disaster in this incredible new science-based thriller.',
-      coverImage: '/images/books/hanger.avif',
-      genre: ['science', 'fiction'],
-      pages: 496,
-      language: 'English',
-      isbn: '978-0593135204',
-      publisher: 'Ballantine Books',
-      isNew: true
-    },
-    {
-      id: '4',
-      title: 'Emerging African Voices',
-      author: 'Walter P.Collins',
-      publishedDate: '2021-05-04',
-      views: 45678,
-      description: 'A lone astronaut must save the earth from disaster in this incredible new science-based thriller.',
-      coverImage: '/images/books/emerging.jpg',
-      genre: ['science', 'fiction'],
-      pages: 496,
-      language: 'English',
-      isbn: '978-0593135204',
-      publisher: 'Ballantine Books',
-      isNew: true
-    },
-    {
-      id: '5',
-      title: 'The Wonga Coup',
-      author: 'Adam Robert',
-      publishedDate: '2021-05-04',
-      views: 45678,
-      description: 'A lone astronaut must save the earth from disaster in this incredible new science-based thriller.',
-      coverImage: '/images/books/wonga.webp',
-      genre: ['science', 'fiction'],
-      pages: 496,
-      language: 'English',
-      isbn: '978-0593135204',
-      publisher: 'Ballantine Books',
-      isNew: true
+  // Fetch data from Supabase
+  useEffect(() => {
+    fetchBooks();
+  }, []);
+
+  const fetchBooks = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("books")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      // Fetch comment counts for all items
+      const { data: commentData } = await supabase
+        .from("content_comments")
+        .select("content_id")
+        .eq("content_type", "books");
+
+      // Fetch like counts for all items
+      const { data: likeData } = await supabase
+        .from("content_likes")
+        .select("content_id")
+        .eq("content_type", "books");
+
+      // Create maps for counts
+      const commentMap = new Map();
+      if (commentData) {
+        commentData.forEach((item: any) => {
+          commentMap.set(item.content_id, (commentMap.get(item.content_id) || 0) + 1);
+        });
+      }
+
+      const likeMap = new Map();
+      if (likeData) {
+        likeData.forEach((item: any) => {
+          likeMap.set(item.content_id, (likeMap.get(item.content_id) || 0) + 1);
+        });
+      }
+
+      // Merge counts with items
+      const itemsWithCounts = (data || []).map((item) => ({
+        ...item,
+        comment_count: commentMap.get(item.id) || 0,
+        like_count: likeMap.get(item.id) || 0,
+      }));
+
+      setBooks(itemsWithCounts);
+      calculateStats(itemsWithCounts);
+    } catch (error) {
+      console.error("Error fetching books:", error);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  const calculateStats = (data: Book[]) => {
+    const totalBooks = data.length;
+    const totalViews = data.reduce((acc, i) => acc + (i.views || 0), 0);
+    const totalLikes = data.reduce((acc, i) => acc + (i.like_count || 0), 0);
+    
+    // Get unique genres
+    const allGenres = data.flatMap(book => book.genre || []);
+    const uniqueGenres = new Set(allGenres).size;
+
+    setStats({
+      totalBooks,
+      totalViews,
+      totalGenres: uniqueGenres,
+      totalLikes,
+    });
+  };
+
+  // 🔥 VIEW TRACKING FUNCTION
+  const trackView = async (book: Book) => {
+    try {
+      const newViews = (book.views || 0) + 1;
+      
+      // Update in database
+      const { error } = await supabase
+        .from("books")
+        .update({ views: newViews })
+        .eq("id", book.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setBooks(prevBooks => 
+        prevBooks.map(b => 
+          b.id === book.id 
+            ? { ...b, views: newViews } 
+            : b
+        )
+      );
+
+      // Update stats
+      setStats(prev => ({
+        ...prev,
+        totalViews: prev.totalViews + 1
+      }));
+
+      console.log(`View tracked for book: ${book.title} (Total: ${newViews})`);
+      return true;
+    } catch (error) {
+      console.error("Error tracking view:", error);
+      return false;
+    }
+  };
 
   // Filter and sort
-  const filteredBooks = books.filter(book => {
-    const matchesSearch = book.title.toLowerCase().includes(searchQuery.toLowerCase())
-      || book.author.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesGenre = selectedGenre === 'all' || book.genre.includes(selectedGenre);
+  const filteredBooks = books.filter((book) => {
+    const matchesSearch =
+      book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      book.author.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesGenre =
+      selectedGenre === "all" || (book.genre || []).includes(selectedGenre);
     return matchesSearch && matchesGenre;
   });
 
   const sortedBooks = [...filteredBooks].sort((a, b) => {
     switch (sortBy) {
-      case 'newest':
-        return new Date(b.publishedDate).getTime() - new Date(a.publishedDate).getTime();
-      case 'oldest':
-        return new Date(a.publishedDate).getTime() - new Date(b.publishedDate).getTime();
-      case 'views':
-        return b.views - a.views;
-      case 'title':
+      case "newest":
+        return (
+          new Date(b.published_date).getTime() -
+          new Date(a.published_date).getTime()
+        );
+      case "oldest":
+        return (
+          new Date(a.published_date).getTime() -
+          new Date(b.published_date).getTime()
+        );
+      case "views":
+        return (b.views || 0) - (a.views || 0);
+      case "title":
         return a.title.localeCompare(b.title);
       default:
         return 0;
     }
   });
 
-  const handleBookClick = (book: Book) => {
+  // 🔥 UPDATED HANDLERS WITH VIEW TRACKING
+  const handleBookClick = async (book: Book) => {
+    // Track view when book modal opens
+    await trackView(book);
     setSelectedBook(book);
   };
 
-  const handleRead = (book: Book) => {
-    alert(`Opening: ${book.title}`);
-    setSelectedBook(null);
+  const handleRead = async (book: Book) => {
+    if (book.pdf_url) {
+      // Track view when PDF is opened
+      await trackView(book);
+      setSelectedPDF(book);
+    } else {
+      alert("PDF not available for this book");
+    }
   };
 
   const handleDownload = (book: Book) => {
-    alert(`Downloading: ${book.title}`);
-    setSelectedBook(null);
+    if (book.pdf_url) {
+      window.open(book.pdf_url, "_blank");
+    } else {
+      alert("PDF not available for download");
+    }
   };
+
+  // 🔥 TRACK VIEW WHEN PDF VIEWER OPENS
+  const handlePDFViewTracked = async () => {
+    if (selectedPDF) {
+      await trackView(selectedPDF);
+    }
+  };
+
+  // NEW: Handle opening comments modal
+  const handleOpenComments = (book: Book, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering the card click
+    setSelectedCommentItem(book);
+    setCommentsModalOpen(true);
+  };
+
+  const StatCard = ({ icon: Icon, label, value }: { icon: any; label: string; value: string }) => (
+    <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 shadow-sm border border-gray-200">
+      <div className="flex items-center gap-3">
+        <div className="p-2 bg-blue-50 rounded-lg">
+          <Icon className="w-5 h-5 text-blue-600" />
+        </div>
+        <div>
+          <p className="text-sm text-gray-600">{label}</p>
+          <p className="text-lg font-bold text-gray-900">{value}</p>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading our library...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-8">
@@ -167,6 +375,14 @@ export default function BooksPage() {
           </p>
         </div>
 
+        {/* Stats Section - Shows REAL view counts! */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <StatCard icon={BookOpen} label="Total Books" value={stats.totalBooks.toString()} />
+          <StatCard icon={Eye} label="Total Views" value={stats.totalViews.toLocaleString()} />
+          <StatCard icon={BookOpen} label="Genres" value={stats.totalGenres.toString()} />
+          <StatCard icon={FaHeart} label="Total Likes" value={stats.totalLikes.toLocaleString()} />
+        </div>
+
         {/* Search & Filters */}
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-8">
           <div className="flex flex-col lg:flex-row gap-6">
@@ -178,7 +394,7 @@ export default function BooksPage() {
                 type="text"
                 placeholder="Search books or authors..."
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
               />
             </div>
@@ -188,12 +404,14 @@ export default function BooksPage() {
               <div className="relative">
                 <select
                   value={selectedGenre}
-                  onChange={e => setSelectedGenre(e.target.value)}
+                  onChange={(e) => setSelectedGenre(e.target.value)}
                   className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                 >
                   {genres.map((tag: string) => (
                     <option key={tag} value={tag}>
-                      {tag === 'all' ? 'All Genres' : tag.charAt(0).toUpperCase() + tag.slice(1)}
+                      {tag === "all"
+                        ? "All Genres"
+                        : tag.charAt(0).toUpperCase() + tag.slice(1)}
                     </option>
                   ))}
                 </select>
@@ -205,7 +423,7 @@ export default function BooksPage() {
               <div className="relative">
                 <select
                   value={sortBy}
-                  onChange={e => setSortBy(e.target.value)}
+                  onChange={(e) => setSortBy(e.target.value)}
                   className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                 >
                   <option value="newest">Newest First</option>
@@ -220,14 +438,14 @@ export default function BooksPage() {
 
               <div className="flex bg-gray-100 rounded-xl p-1">
                 <button
-                  onClick={() => setViewMode('grid')}
-                  className={`p-2 rounded-lg transition-all duration-200 ${viewMode === 'grid' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                  onClick={() => setViewMode("grid")}
+                  className={`p-2 rounded-lg transition-all duration-200 ${viewMode === "grid" ? "bg-white shadow-sm text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
                 >
                   <Grid className="w-5 h-5" />
                 </button>
                 <button
-                  onClick={() => setViewMode('list')}
-                  className={`p-2 rounded-lg transition-all duration-200 ${viewMode === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                  onClick={() => setViewMode("list")}
+                  className={`p-2 rounded-lg transition-all duration-200 ${viewMode === "list" ? "bg-white shadow-sm text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
                 >
                   <List className="w-5 h-5" />
                 </button>
@@ -237,143 +455,213 @@ export default function BooksPage() {
         </div>
 
         {/* Books Grid */}
-        <div className={`${
-          viewMode === 'grid'
-            ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6'
-            : 'space-y-6'
-        }`}>
-          {sortedBooks.map(book => (
-            <div
-              key={book.id}
-              className={`bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 group cursor-pointer overflow-hidden ${
-                viewMode === 'list' ? 'flex' : 'h-full flex flex-col'
-              }`}
-              onMouseEnter={() => setShowActions(book.id)}
-              onMouseLeave={() => setShowActions(null)}
-            >
-              {/* Cover Image - Reduced Height */}
-              <div className={`relative overflow-hidden bg-gray-100 ${
-                viewMode === 'list' ? 'w-32 flex-shrink-0' : 'h-48'
-              }`}>
-                <Image
-                  src={book.coverImage}
-                  alt={book.title}
-                  fill
-                  className="object-cover transition-transform duration-300 group-hover:scale-105"
-                />
-
-                {/* Badges */}
-                <div className="absolute top-3 left-3 space-y-2">
-                  {book.isFeatured && (
-                    <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
-                      Featured
-                    </span>
-                  )}
-                  {book.isNew && (
-                    <span className="bg-gradient-to-r from-green-400 to-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
-                      New
-                    </span>
-                  )}
-                </div>
-
-                {/* Action Buttons */}
-                <div className={`absolute top-3 right-3 transition-all duration-300 ${
-                  showActions === book.id ? 'opacity-100' : 'opacity-0'
-                } space-y-2`}>
-                  <button className="w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors">
-                    <Bookmark className="w-4 h-4 text-gray-600" />
-                  </button>
-                  <button className="w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors">
-                    <Share2 className="w-4 h-4 text-gray-600" />
-                  </button>
-                </div>
-
-                {/* Quick Actions Overlay */}
-                <div className={`absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center transition-all duration-300 ${
-                  showActions === book.id ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                }`}>
-                  <div className="flex gap-3">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRead(book);
-                      }}
-                      className="bg-green-500 text-white p-3 rounded-full hover:bg-green-600 transition-colors"
-                    >
-                      <Play className="w-5 h-5" />
-                    </button>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDownload(book);
-                      }}
-                      className="bg-blue-500 text-white p-3 rounded-full hover:bg-blue-600 transition-colors"
-                    >
-                      <Download className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Book Info */}
-              <div className={`p-4 flex-1 flex flex-col ${viewMode === 'list' ? 'flex-1' : ''}`}>
-                <div className="mb-3 flex-1">
-                  <h3 className="font-bold text-lg text-gray-900 line-clamp-2 mb-2 group-hover:text-blue-600 transition-colors">
-                    {book.title}
-                  </h3>
-                  
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center text-gray-600">
-                      <User className="w-4 h-4 mr-1" />
-                      <span className="text-sm font-medium">{book.author}</span>
-                    </div>
-                    <div className="flex items-center text-sm text-gray-500">
-                      <Eye className="w-4 h-4 mr-1" />
-                      <span>{book.views.toLocaleString()}</span>
-                    </div>
-                  </div>
-
-                  <p className="text-gray-600 text-sm line-clamp-2 mb-3">
-                    {book.description}
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between text-sm text-gray-500 pt-3 border-t border-gray-100">
-                  <div className="flex flex-wrap gap-1">
-                    {book.genre.slice(0, 2).map((tag: string) => (
-                      <span key={tag} className="bg-blue-50 text-blue-600 text-xs px-2 py-1 rounded-full">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                  <div>{book.pages}p</div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Empty State */}
-        {sortedBooks.length === 0 && (
+        {sortedBooks.length === 0 ? (
           <div className="text-center py-16">
             <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <Search className="w-12 h-12 text-gray-400" />
             </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-2">No books found</h3>
-            <p className="text-gray-600">Try adjusting your search or filters</p>
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">
+              No books found
+            </h3>
+            <p className="text-gray-600">
+              Try adjusting your search or filters
+            </p>
+          </div>
+        ) : (
+          <div
+            className={`${
+              viewMode === "grid"
+                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                : "space-y-6"
+            }`}
+          >
+            {sortedBooks.map((book) => (
+              <div
+                key={book.id}
+                className={`bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 group cursor-pointer overflow-hidden ${
+                  viewMode === "list" ? "flex" : "h-full flex flex-col"
+                }`}
+                onMouseEnter={() => setShowActions(book.id)}
+                onMouseLeave={() => setShowActions(null)}
+                onClick={() => handleBookClick(book)}
+              >
+                {/* Cover Image */}
+                <div
+                  className={`relative overflow-hidden bg-gray-100 ${
+                    viewMode === "list" ? "w-32 flex-shrink-0" : "h-48"
+                  }`}
+                >
+                  <Image
+                    src={book.cover_image}
+                    alt={book.title}
+                    fill
+                    className="object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+
+                  {/* Badges */}
+                  <div className="absolute top-3 left-3 space-y-2">
+                    {book.is_featured && (
+                      <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
+                        Featured
+                      </span>
+                    )}
+                    {book.is_new && (
+                      <span className="bg-gradient-to-r from-green-400 to-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
+                        New
+                      </span>
+                    )}
+                  </div>
+
+                  {/* View Count Badge */}
+                  <div className="absolute bottom-3 right-3">
+                    <span className="bg-black/75 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                      <Eye className="w-3 h-3" />
+                      {book.views?.toLocaleString() || 0}
+                    </span>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div
+                    className={`absolute top-3 right-3 transition-all duration-300 ${
+                      showActions === book.id ? "opacity-100" : "opacity-0"
+                    } space-y-2`}
+                  >
+                    <button 
+                      className="w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Add bookmark functionality
+                      }}
+                    >
+                      <Bookmark className="w-4 h-4 text-gray-600" />
+                    </button>
+                    <button 
+                      className="w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Add share functionality
+                      }}
+                    >
+                      <Share2 className="w-4 h-4 text-gray-600" />
+                    </button>
+                  </div>
+
+                  {/* Quick Actions Overlay */}
+                  <div
+                    className={`absolute inset-0 bg-black/60 flex items-center justify-center transition-all duration-300 ${
+                      showActions === book.id
+                        ? "opacity-100"
+                        : "opacity-0 pointer-events-none"
+                    }`}
+                  >
+                    <div className="flex gap-3">
+                      {book.pdf_url && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRead(book);
+                          }}
+                          className="bg-green-500 text-white p-3 rounded-full hover:bg-green-600 transition-colors"
+                        >
+                          <Play className="w-5 h-5" />
+                        </button>
+                      )}
+                      {book.pdf_url && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownload(book);
+                          }}
+                          className="bg-blue-500 text-white p-3 rounded-full hover:bg-blue-600 transition-colors"
+                        >
+                          <Download className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Book Info */}
+                <div
+                  className={`p-4 flex-1 flex flex-col ${viewMode === "list" ? "flex-1" : ""}`}
+                >
+                  <div className="mb-3 flex-1">
+                    <h3 className="font-bold text-lg text-gray-900 line-clamp-2 mb-2 group-hover:text-blue-600 transition-colors">
+                      {book.title}
+                    </h3>
+
+                    <div className="flex items-center gap-4 mb-2">
+                      <div className="flex items-center text-gray-600">
+                        <User className="w-4 h-4 mr-1" />
+                        <span className="text-sm font-medium">{book.author}</span>
+                      </div>
+                      
+                      {/* Card Like Button - Directly on the card */}
+                      <CardLikeButton 
+                        contentId={book.id}
+                        contentType="books"
+                        initialCount={book.like_count || 0}
+                        onLikeChange={(newCount) => {
+                          // Update the book's like count in local state
+                          setBooks(prevBooks => 
+                            prevBooks.map(b => 
+                              b.id === book.id ? { ...b, like_count: newCount } : b
+                            )
+                          );
+                          // Update stats
+                          setStats(prev => ({
+                            ...prev,
+                            totalLikes: prev.totalLikes + (newCount - (book.like_count || 0))
+                          }));
+                        }}
+                      />
+                      
+                      <button 
+                        onClick={(e) => handleOpenComments(book, e)}
+                        className="flex items-center gap-1 text-gray-500 hover:text-blue-600 transition-colors"
+                      >
+                        <FaComment className="w-4 h-4" />
+                        <span className="text-xs font-medium">{book.comment_count || 0}</span>
+                      </button>
+                    </div>
+
+                    <p className="text-gray-600 text-sm line-clamp-2 mb-3">
+                      {book.description}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm text-gray-500 pt-3 border-t border-gray-100">
+                    <div className="flex flex-wrap gap-1">
+                      {(book.genre || []).slice(0, 2).map((tag: string) => (
+                        <span
+                          key={tag}
+                          className="bg-blue-50 text-blue-600 text-xs px-2 py-1 rounded-full"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      <span>{book.pages}p</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
         {/* Book Detail Modal */}
         {selectedBook && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
               <div className="flex flex-col lg:flex-row">
                 {/* Book Cover */}
-                <div className="lg:w-2/5 p-8">
-                  <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gray-100">
+                <div className="lg:w-2/5 p-8 bg-gradient-to-br from-blue-50 to-purple-50">
+                  <div className="relative aspect-[3/4] rounded-2xl overflow-hidden shadow-xl">
                     <Image
-                      src={selectedBook.coverImage}
+                      src={selectedBook.cover_image}
                       alt={selectedBook.title}
                       fill
                       className="object-cover"
@@ -391,17 +679,21 @@ export default function BooksPage() {
                       <div className="flex items-center space-x-4 mb-4">
                         <div className="flex items-center text-gray-600">
                           <User className="w-5 h-5 mr-2" />
-                          <span className="text-lg font-medium">{selectedBook.author}</span>
+                          <span className="text-lg font-medium">
+                            {selectedBook.author}
+                          </span>
                         </div>
                         <div className="flex items-center text-gray-500">
                           <Eye className="w-5 h-5 mr-2" />
-                          <span>{selectedBook.views.toLocaleString()} views</span>
+                          <span>
+                            {selectedBook.views?.toLocaleString() || 0} views
+                          </span>
                         </div>
                       </div>
                     </div>
                     <button
                       onClick={() => setSelectedBook(null)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors text-2xl"
+                      className="text-gray-400 hover:text-gray-600 transition-colors text-2xl p-2 hover:bg-gray-100 rounded-full"
                     >
                       ×
                     </button>
@@ -412,10 +704,18 @@ export default function BooksPage() {
                       {selectedBook.description}
                     </p>
 
-                    <div className="grid grid-cols-2 gap-4 py-4">
+                    <div className="grid grid-cols-2 gap-4 py-4 bg-blue-50 rounded-xl p-4">
                       <div>
                         <span className="text-sm text-gray-500">Published</span>
-                        <p className="font-medium">{new Date(selectedBook.publishedDate).toLocaleDateString()}</p>
+                        <p className="font-medium">
+                          {new Date(
+                            selectedBook.published_date,
+                          ).toLocaleDateString("en-US", {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })}
+                        </p>
                       </div>
                       <div>
                         <span className="text-sm text-gray-500">Pages</span>
@@ -427,15 +727,15 @@ export default function BooksPage() {
                       </div>
                       <div>
                         <span className="text-sm text-gray-500">Publisher</span>
-                        <p className="font-medium">{selectedBook.publisher}</p>
+                        <p className="font-medium">{selectedBook.publisher || 'N/A'}</p>
                       </div>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      {selectedBook.genre.map((genre) => (
+                      {(selectedBook.genre || []).map((genre) => (
                         <span
                           key={genre}
-                          className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-sm font-medium"
+                          className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-sm font-medium border border-blue-100"
                         >
                           {genre}
                         </span>
@@ -443,26 +743,65 @@ export default function BooksPage() {
                     </div>
 
                     <div className="flex space-x-4 pt-6">
-                      <button 
-                        onClick={() => handleRead(selectedBook)}
-                        className="flex-1 bg-green-600 text-white py-4 px-6 rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-3"
-                      >
-                        <Play className="w-5 h-5" />
-                        Read Now
-                      </button>
-                      <button 
-                        onClick={() => handleDownload(selectedBook)}
-                        className="flex-1 border border-gray-300 text-gray-700 py-4 px-6 rounded-xl font-semibold hover:bg-gray-50 transition-colors flex items-center justify-center gap-3"
-                      >
-                        <Download className="w-5 h-5" />
-                        Download
-                      </button>
+                      {selectedBook.pdf_url ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              handleRead(selectedBook);
+                              setSelectedBook(null);
+                            }}
+                            className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-4 px-6 rounded-xl font-semibold hover:from-green-700 hover:to-emerald-700 transition-all flex items-center justify-center gap-3 shadow-lg"
+                          >
+                            <Play className="w-5 h-5" />
+                            Read Now
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleDownload(selectedBook);
+                              setSelectedBook(null);
+                            }}
+                            className="flex-1 border border-gray-300 text-gray-700 py-4 px-6 rounded-xl font-semibold hover:bg-gray-50 transition-all flex items-center justify-center gap-3"
+                          >
+                            <Download className="w-5 h-5" />
+                            Download PDF
+                          </button>
+                        </>
+                      ) : (
+                        <div className="w-full text-center py-4 text-gray-500">
+                          PDF not available for this book
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+        )}
+
+        {/* PDF Viewer with view tracking */}
+        {selectedPDF && (
+          <SimplePDFViewer 
+            item={selectedPDF} 
+            onClose={() => setSelectedPDF(null)}
+            onViewTracked={handlePDFViewTracked}
+          />
+        )}
+
+        {/* NEW: Comments Modal */}
+        {commentsModalOpen && selectedCommentItem && (
+          <ContentCommentsModal
+            isOpen={commentsModalOpen}
+            onClose={() => {
+              setCommentsModalOpen(false);
+              setSelectedCommentItem(null);
+              // Refresh comment counts when modal closes
+              fetchBooks();
+            }}
+            contentId={selectedCommentItem.id}
+            contentType="books"
+            contentTitle={selectedCommentItem.title}
+          />
         )}
       </div>
     </div>

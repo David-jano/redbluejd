@@ -11,28 +11,55 @@ import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
+const PAGE_SIZE = 6; // Number of articles per page
+
 const ArticleGrid = () => {
   const [articles, setArticles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    const fetchArticles = async () => {
-      const { data, error } = await supabase
-        .from("articles")
-        .select("*")
-        .order("created_at", { ascending: false });
+  const fetchArticles = async (pageNum: number, isLoadMore = false) => {
+    const from = (pageNum - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
 
-      if (error) {
-        console.error("❌ Failed to load articles:", error.message);
+    const { data, error } = await supabase
+      .from("articles")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      console.error("❌ Failed to load articles:", error.message);
+    } else {
+      if (isLoadMore) {
+        setArticles((prev) => [...prev, ...data]);
       } else {
         setArticles(data);
       }
+      
+      // Check if we have more articles to load
+      setHasMore(data.length === PAGE_SIZE);
+    }
 
+    if (isLoadMore) {
+      setLoadingMore(false);
+    } else {
       setLoading(false);
-    };
+    }
+  };
 
-    fetchArticles();
+  useEffect(() => {
+    fetchArticles(1);
   }, []);
+
+  const handleLoadMore = async () => {
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    await fetchArticles(nextPage, true);
+    setPage(nextPage);
+  };
 
   if (loading) return <p className="text-center py-10">Loading articles...</p>;
 
@@ -62,7 +89,7 @@ const ArticleGrid = () => {
                     <span className="block text-justify mb-3">
                       {article.description}
                     </span>
-                    <span className="rounded-full bg-gray-200  text-black px-1.5 py-0.5 text-[0.65rem] font-semibold">
+                    <span className="rounded-full bg-gray-200 text-black px-1.5 py-0.5 text-[0.65rem] font-semibold">
                       {article.label}
                     </span>
                   </p>
@@ -78,6 +105,19 @@ const ArticleGrid = () => {
           </div>
         ))}
       </div>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center mt-10">
+          <button
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            className="px-6 py-3 bg-gray-900 text-white text-sm font-medium rounded-full hover:bg-gray-800 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loadingMore ? "Loading..." : "Load More Articles"}
+          </button>
+        </div>
+      )}
     </div>
   );
 };
