@@ -252,7 +252,7 @@ export default function HistoryPage() {
     });
   };
 
-  // 🔥 VIEW TRACKING FUNCTION
+  // VIEW TRACKING FUNCTION
   const trackView = async (item: HistoryItem) => {
     try {
       const newViews = (item.views || 0) + 1;
