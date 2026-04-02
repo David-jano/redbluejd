@@ -256,7 +256,8 @@ export default async function ArticleDetail({ params }: Props) {
         <div className="flex items-center gap-4">
           {/* Like Button */}
           <ArticleLikeButton
-            articleId={article.id}
+            contentId={article.id}
+            contentType="articles" // ← must pass this
             initialCount={articleWithCounts.like_count}
           />
 
