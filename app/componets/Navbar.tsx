@@ -259,7 +259,7 @@ export default function Navbar() {
             className={desktopDropdownLinkClass}
             onClick={handleDesktopDropdownLinkClick}
           >
-            <FaFlask /> SIYANSE
+            <FaFlask /> SIYANSI
           </Link>
           <Link
             href="/ibitabo"
@@ -301,7 +301,7 @@ export default function Navbar() {
             className={desktopDropdownLinkClass}
             onClick={handleDesktopDropdownLinkClick}
           >
-            <FaBook /> PHILOSOPH
+            <FaBook /> FILOZOFIYA
           </Link>
         </div>
       )}
