@@ -5,6 +5,8 @@ import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import CardLikeButton from "../componets/CardLikeButton";
 
+import ClientImage from "../componets/ClientImage";
+
 import {
   Search,
   Eye,
@@ -32,9 +34,9 @@ import {
   Microscope,
   Loader2,
 } from "lucide-react";
-// NEW IMPORTS
 import { FaThumbsUp, FaComment } from "react-icons/fa";
 import ContentCommentsModal from "../componets/ContentCommentsModal";
+
 interface ScienceItem {
   id: number;
   title: string;
@@ -55,11 +57,31 @@ interface ScienceItem {
   type: "book" | "documentary";
   is_featured: boolean | null;
   is_new: boolean | null;
-  rating?: number | null; // Keep optional for backward compatibility
+  rating?: number | null;
   pdf_url: string | null;
-  // NEW: Add comment and like counts
   comment_count?: number;
   like_count?: number;
+}
+
+// Helper function for Vercel image paths
+function getValidImageUrl(imageUrl: string | null | undefined): string {
+  if (!imageUrl) {
+    return "https://placehold.co/800x600/e0e0e0/999?text=No+Image";
+  }
+
+  if (imageUrl.startsWith("http")) {
+    return imageUrl;
+  }
+
+  if (imageUrl.startsWith("/images/")) {
+    return imageUrl.replace("/images/", "/uploads/");
+  }
+
+  if (imageUrl.startsWith("/uploads/")) {
+    return imageUrl;
+  }
+
+  return imageUrl;
 }
 
 const SimplePDFViewer = ({
@@ -73,7 +95,6 @@ const SimplePDFViewer = ({
 }) => {
   const pdfUrl = item.pdf_url || "";
 
-  // Track view when PDF viewer opens
   useEffect(() => {
     if (onViewTracked) {
       onViewTracked();
@@ -143,13 +164,9 @@ export default function SciencePage() {
     "books",
   );
   const [selectedPDF, setSelectedPDF] = useState<ScienceItem | null>(null);
-
-  // NEW: State for comments modal
   const [commentsModalOpen, setCommentsModalOpen] = useState(false);
   const [selectedCommentItem, setSelectedCommentItem] =
     useState<ScienceItem | null>(null);
-
-  // State for fetched data
   const [items, setItems] = useState<ScienceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -181,37 +198,34 @@ export default function SciencePage() {
 
   const difficulties = ["all", "Beginner", "Intermediate", "Advanced"];
 
-  // Fetch data from Supabase
   useEffect(() => {
     fetchItems();
   }, []);
 
+  // OPTIMIZED: Parallel fetching for items, comments, and likes
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("science_items")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const [itemsResult, commentsResult, likesResult] = await Promise.all([
+        supabase
+          .from("science_items")
+          .select("*")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("content_comments")
+          .select("content_id")
+          .eq("content_type", "science"),
+        supabase
+          .from("content_likes")
+          .select("content_id")
+          .eq("content_type", "science"),
+      ]);
 
-      if (error) throw error;
+      if (itemsResult.error) throw itemsResult.error;
 
-      // Fetch comment counts for all items
-      const { data: commentData } = await supabase
-        .from("content_comments")
-        .select("content_id")
-        .eq("content_type", "science");
-
-      // Fetch like counts for all items
-      const { data: likeData } = await supabase
-        .from("content_likes")
-        .select("content_id")
-        .eq("content_type", "science");
-
-      // Create maps for counts
       const commentMap = new Map();
-      if (commentData) {
-        commentData.forEach((item: any) => {
+      if (commentsResult.data) {
+        commentsResult.data.forEach((item: any) => {
           commentMap.set(
             item.content_id,
             (commentMap.get(item.content_id) || 0) + 1,
@@ -220,14 +234,13 @@ export default function SciencePage() {
       }
 
       const likeMap = new Map();
-      if (likeData) {
-        likeData.forEach((item: any) => {
+      if (likesResult.data) {
+        likesResult.data.forEach((item: any) => {
           likeMap.set(item.content_id, (likeMap.get(item.content_id) || 0) + 1);
         });
       }
 
-      // Merge counts with items
-      const itemsWithCounts = (data || []).map((item) => ({
+      const itemsWithCounts = (itemsResult.data || []).map((item) => ({
         ...item,
         comment_count: commentMap.get(item.id) || 0,
         like_count: likeMap.get(item.id) || 0,
@@ -256,12 +269,9 @@ export default function SciencePage() {
     });
   };
 
-  // 🔥 VIEW TRACKING FUNCTION
   const trackView = async (item: ScienceItem) => {
     try {
       const newViews = (item.views || 0) + 1;
-
-      // Update in database
       const { error } = await supabase
         .from("science_items")
         .update({ views: newViews })
@@ -269,34 +279,23 @@ export default function SciencePage() {
 
       if (error) throw error;
 
-      // Update local state
       setItems((prevItems) =>
         prevItems.map((i) =>
           i.id === item.id ? { ...i, views: newViews } : i,
         ),
       );
 
-      // Update stats
-      setStats((prev) => ({
-        ...prev,
-        totalViews: prev.totalViews + 1,
-      }));
-
-      console.log(`View tracked for: ${item.title} (Total: ${newViews})`);
-      return true;
+      setStats((prev) => ({ ...prev, totalViews: prev.totalViews + 1 }));
     } catch (error) {
       console.error("Error tracking view:", error);
-      return false;
     }
   };
 
-  // Filter and sort items
   const getFilteredItems = () => {
     let filtered = items.filter((item) => {
       const matchesSearch =
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.author?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        false ||
         item.narrator?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         false;
 
@@ -309,7 +308,6 @@ export default function SciencePage() {
       return matchesSearch && matchesField && matchesDifficulty && matchesType;
     });
 
-    // Sort items
     filtered = [...filtered].sort((a, b) => {
       switch (sortBy) {
         case "newest":
@@ -341,11 +339,8 @@ export default function SciencePage() {
   );
   const activeItems = activeTab === "books" ? books : documentaries;
 
-  // 🔥 UPDATED HANDLERS WITH VIEW TRACKING
   const handleItemClick = async (item: ScienceItem) => {
-    // Track view when item is clicked
     await trackView(item);
-
     if (item.type === "book" && item.pdf_url) {
       setSelectedPDF(item);
     } else {
@@ -354,86 +349,57 @@ export default function SciencePage() {
   };
 
   const handlePlay = async (item: ScienceItem) => {
-    // Track view when documentary is played
     await trackView(item);
-
     if (item.type === "documentary" && item.youtube_url) {
       window.open(item.youtube_url, "_blank");
-    } else {
-      alert("Video not available for this item");
     }
   };
 
   const handleDownload = (item: ScienceItem) => {
     if (item.type === "book" && item.pdf_url) {
       window.open(item.pdf_url, "_blank");
-    } else {
-      alert("Download not available for this item");
     }
   };
 
   const handleRead = async (item: ScienceItem) => {
-    // Track view when PDF is opened
     await trackView(item);
-
     if (item.pdf_url) {
       setSelectedPDF(item);
-    } else {
-      alert("PDF not available for this item");
     }
   };
 
-  // 🔥 TRACK VIEW WHEN PDF VIEWER OPENS
   const handlePDFViewTracked = async () => {
     if (selectedPDF) {
       await trackView(selectedPDF);
     }
   };
 
-  // NEW: Handle opening comments modal
   const handleOpenComments = (item: ScienceItem, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent triggering the card click
+    e.stopPropagation();
     setSelectedCommentItem(item);
     setCommentsModalOpen(true);
   };
 
   const getFieldIcon = (field: string) => {
-    switch (field) {
-      case "Physics":
-        return <Atom className="w-4 h-4" />;
-      case "Biology":
-        return <Zap className="w-4 h-4" />;
-      case "Chemistry":
-        return <Beaker className="w-4 h-4" />;
-      case "Astronomy":
-        return <Telescope className="w-4 h-4" />;
-      case "Neuroscience":
-        return <Brain className="w-4 h-4" />;
-      case "Computer Science":
-        return <Cpu className="w-4 h-4" />;
-      case "Artificial Intelligence":
-        return <Brain className="w-4 h-4" />;
-      case "Quantum Mechanics":
-        return <Atom className="w-4 h-4" />;
-      case "Mathematics":
-        return <Server className="w-4 h-4" />;
-      case "Engineering":
-        return <Cpu className="w-4 h-4" />;
-      case "Robotics":
-        return <Server className="w-4 h-4" />;
-      case "Biotechnology":
-        return <Beaker className="w-4 h-4" />;
-      case "Genetics":
-        return <Zap className="w-4 h-4" />;
-      case "Astrophysics":
-        return <Telescope className="w-4 h-4" />;
-      case "Climate Science":
-        return <Globe className="w-4 h-4" />;
-      case "Psychology":
-        return <Brain className="w-4 h-4" />;
-      default:
-        return <Beaker className="w-4 h-4" />;
-    }
+    const icons: Record<string, React.ReactNode> = {
+      Physics: <Atom className="w-4 h-4" />,
+      Biology: <Zap className="w-4 h-4" />,
+      Chemistry: <Beaker className="w-4 h-4" />,
+      Astronomy: <Telescope className="w-4 h-4" />,
+      Neuroscience: <Brain className="w-4 h-4" />,
+      "Computer Science": <Cpu className="w-4 h-4" />,
+      "Artificial Intelligence": <Brain className="w-4 h-4" />,
+      "Quantum Mechanics": <Atom className="w-4 h-4" />,
+      Mathematics: <Server className="w-4 h-4" />,
+      Engineering: <Cpu className="w-4 h-4" />,
+      Robotics: <Server className="w-4 h-4" />,
+      Biotechnology: <Beaker className="w-4 h-4" />,
+      Genetics: <Zap className="w-4 h-4" />,
+      Astrophysics: <Telescope className="w-4 h-4" />,
+      "Climate Science": <Globe className="w-4 h-4" />,
+      Psychology: <Brain className="w-4 h-4" />,
+    };
+    return icons[field] || <Beaker className="w-4 h-4" />;
   };
 
   const StatCard = ({
@@ -493,7 +459,7 @@ export default function SciencePage() {
           </p>
         </div>
 
-        {/* Stats Section - Shows REAL view counts! */}
+        {/* Stats Section */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <StatCard
             icon={BookOpen}
@@ -533,28 +499,25 @@ export default function SciencePage() {
               />
             </div>
 
-            {/* Filters */}
             <div className="flex flex-wrap gap-4 items-center">
               <div className="relative">
                 <select
                   value={selectedType}
                   onChange={(e) => setSelectedType(e.target.value as any)}
-                  className="appearance-none bg-white border border-blue-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  className="appearance-none bg-white border border-blue-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="all">Byose</option>
                   <option value="book">Ibitabo gusa</option>
                   <option value="documentary">Ibyegeranyo gusa</option>
                 </select>
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <ChevronDown className="h-4 w-4 text-gray-400" />
-                </div>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
 
               <div className="relative">
                 <select
                   value={selectedField}
                   onChange={(e) => setSelectedField(e.target.value)}
-                  className="appearance-none bg-white border border-blue-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  className="appearance-none bg-white border border-blue-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500"
                 >
                   {fields.map((field) => (
                     <option key={field} value={field}>
@@ -562,16 +525,14 @@ export default function SciencePage() {
                     </option>
                   ))}
                 </select>
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <ChevronDown className="h-4 w-4 text-gray-400" />
-                </div>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
 
               <div className="relative">
                 <select
                   value={selectedDifficulty}
                   onChange={(e) => setSelectedDifficulty(e.target.value)}
-                  className="appearance-none bg-white border border-blue-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  className="appearance-none bg-white border border-blue-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500"
                 >
                   {difficulties.map((difficulty) => (
                     <option key={difficulty} value={difficulty}>
@@ -579,45 +540,33 @@ export default function SciencePage() {
                     </option>
                   ))}
                 </select>
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <ChevronDown className="h-4 w-4 text-gray-400" />
-                </div>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
 
               <div className="relative">
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="appearance-none bg-white border border-blue-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  className="appearance-none bg-white border border-blue-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="newest">Ibishya mbere</option>
                   <option value="oldest">Ibishaje mbere</option>
                   <option value="views">Ibyarebwe cyane</option>
                   <option value="title">Kuva A-Z</option>
                 </select>
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <ChevronDown className="h-4 w-4 text-gray-400" />
-                </div>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
 
               <div className="flex bg-blue-100 rounded-xl p-1">
                 <button
                   onClick={() => setViewMode("grid")}
-                  className={`p-2 rounded-lg transition-all duration-200 ${
-                    viewMode === "grid"
-                      ? "bg-white shadow-sm text-blue-600"
-                      : "text-blue-500 hover:text-blue-700"
-                  }`}
+                  className={`p-2 rounded-lg transition-all ${viewMode === "grid" ? "bg-white shadow-sm text-blue-600" : "text-blue-500"}`}
                 >
                   <Grid className="w-5 h-5" />
                 </button>
                 <button
                   onClick={() => setViewMode("list")}
-                  className={`p-2 rounded-lg transition-all duration-200 ${
-                    viewMode === "list"
-                      ? "bg-white shadow-sm text-blue-600"
-                      : "text-blue-500 hover:text-blue-700"
-                  }`}
+                  className={`p-2 rounded-lg transition-all ${viewMode === "list" ? "bg-white shadow-sm text-blue-600" : "text-blue-500"}`}
                 >
                   <List className="w-5 h-5" />
                 </button>
@@ -632,10 +581,10 @@ export default function SciencePage() {
             <nav className="-mb-px flex space-x-8">
               <button
                 onClick={() => setActiveTab("books")}
-                className={`py-3 px-1 border-b-2 font-medium text-lg transition-colors duration-200 flex items-center gap-2 ${
+                className={`py-3 px-1 border-b-2 font-medium text-lg transition-colors flex items-center gap-2 ${
                   activeTab === "books"
                     ? "border-blue-600 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
               >
                 <BookOpen className="w-5 h-5" />
@@ -646,10 +595,10 @@ export default function SciencePage() {
               </button>
               <button
                 onClick={() => setActiveTab("documentaries")}
-                className={`py-3 px-1 border-b-2 font-medium text-lg transition-colors duration-200 flex items-center gap-2 ${
+                className={`py-3 px-1 border-b-2 font-medium text-lg transition-colors flex items-center gap-2 ${
                   activeTab === "documentaries"
                     ? "border-blue-600 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
               >
                 <Film className="w-5 h-5" />
@@ -677,11 +626,11 @@ export default function SciencePage() {
           </div>
         ) : (
           <div
-            className={`${
+            className={
               viewMode === "grid"
                 ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
                 : "space-y-6"
-            }`}
+            }
           >
             {activeItems.map((item) => (
               <div
@@ -691,18 +640,14 @@ export default function SciencePage() {
                 }`}
                 onClick={() => handleItemClick(item)}
               >
-                {/* Cover Image with Type Badge */}
+                {/* Cover Image */}
                 <div
-                  className={`relative overflow-hidden bg-gradient-to-br from-blue-50 to-cyan-100 ${
-                    viewMode === "list" ? "w-40 flex-shrink-0" : "h-48"
-                  }`}
+                  className={`relative overflow-hidden bg-gradient-to-br from-blue-50 to-cyan-100 ${viewMode === "list" ? "w-40 flex-shrink-0" : "h-48"}`}
                 >
                   <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent z-10" />
-
-                  {/* Custom Cover Image */}
                   <div className="relative w-full h-full">
-                    <Image
-                      src={item.cover_image}
+                    <ClientImage
+                      src={getValidImageUrl(item.cover_image)}
                       alt={item.title}
                       fill
                       className="object-cover transition-transform duration-300 group-hover:scale-105"
@@ -714,7 +659,6 @@ export default function SciencePage() {
                     />
                   </div>
 
-                  {/* Type Badge */}
                   <div className="absolute top-3 left-3 z-20">
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-bold text-white shadow-lg ${
@@ -727,10 +671,9 @@ export default function SciencePage() {
                     </span>
                   </div>
 
-                  {/* Featured/New Badges */}
                   <div className="absolute top-3 right-3 z-20 space-y-2">
                     {item.is_featured && (
-                      <span className="bg-gradient-to-r from-amber-500 to-orange-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
+                      <span className="bg-gradient-to-r from-amber-500 to-orange-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
                         Featured
                       </span>
                     )}
@@ -741,7 +684,6 @@ export default function SciencePage() {
                     )}
                   </div>
 
-                  {/* View Count Badge */}
                   <div className="absolute bottom-3 right-3 z-20">
                     <span className="bg-black/75 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
                       <Eye className="w-3 h-3" />
@@ -749,7 +691,6 @@ export default function SciencePage() {
                     </span>
                   </div>
 
-                  {/* Field Badge */}
                   <div className="absolute bottom-3 left-3 z-20">
                     <span className="px-3 py-1 bg-white/90 backdrop-blur-sm text-blue-700 text-xs font-bold rounded-full shadow-lg flex items-center gap-1">
                       {getFieldIcon(item.field)}
@@ -757,8 +698,7 @@ export default function SciencePage() {
                     </span>
                   </div>
 
-                  {/* Quick Action Overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-600/80 to-indigo-700/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-30">
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-600/80 to-indigo-700/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30">
                     <div className="flex gap-3">
                       {item.type === "documentary" ? (
                         <button
@@ -800,9 +740,7 @@ export default function SciencePage() {
 
                 {/* Content Info */}
                 <div
-                  className={`p-4 flex-1 flex flex-col ${
-                    viewMode === "list" ? "flex-1" : ""
-                  }`}
+                  className={`p-4 flex-1 flex flex-col ${viewMode === "list" ? "flex-1" : ""}`}
                 >
                   <div className="mb-3 flex-1">
                     <h3 className="font-bold text-lg text-gray-900 line-clamp-2 mb-2 group-hover:text-blue-600 transition-colors">
@@ -828,20 +766,17 @@ export default function SciencePage() {
                         )}
                       </div>
 
-                      {/* Stats row with views, likes, and comments */}
                       <div className="flex items-center gap-3 text-sm text-gray-500">
                         <div className="flex items-center gap-1">
                           <Eye className="w-4 h-4" />
                           <span>{item.views?.toLocaleString() || 0}</span>
                         </div>
 
-                        {/* Card Like Button - Directly on the card */}
                         <CardLikeButton
                           contentId={item.id}
                           contentType="science"
                           initialCount={item.like_count || 0}
                           onLikeChange={(newCount) => {
-                            // Update the item's like count in local state
                             setItems((prevItems) =>
                               prevItems.map((i) =>
                                 i.id === item.id
@@ -867,7 +802,6 @@ export default function SciencePage() {
                     </p>
                   </div>
 
-                  {/* Meta Info */}
                   <div className="pt-3 border-t border-gray-100">
                     <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
                       <div className="flex items-center gap-1">
@@ -910,22 +844,16 @@ export default function SciencePage() {
                         )}
                       </div>
 
-                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
-                          className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Add to bookmarks functionality
-                          }}
+                          className="p-1 hover:bg-gray-100 rounded-full"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           <Bookmark className="w-4 h-4 text-gray-400 hover:text-gray-600" />
                         </button>
                         <button
-                          className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Share functionality
-                          }}
+                          className="p-1 hover:bg-gray-100 rounded-full"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           <Share2 className="w-4 h-4 text-gray-400 hover:text-gray-600" />
                         </button>
@@ -943,11 +871,10 @@ export default function SciencePage() {
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
               <div className="flex flex-col lg:flex-row">
-                {/* Cover Image */}
                 <div className="lg:w-2/5 p-8 bg-gradient-to-br from-blue-50 to-cyan-50">
                   <div className="relative aspect-[3/4] rounded-2xl overflow-hidden shadow-xl">
-                    <Image
-                      src={selectedItem.cover_image}
+                    <ClientImage
+                      src={getValidImageUrl(selectedItem.cover_image)}
                       alt={selectedItem.title}
                       fill
                       className="object-cover"
@@ -968,7 +895,6 @@ export default function SciencePage() {
                   </div>
                 </div>
 
-                {/* Details */}
                 <div className="lg:w-3/5 p-8">
                   <div className="flex justify-between items-start mb-6">
                     <div>
@@ -1003,7 +929,7 @@ export default function SciencePage() {
                     </div>
                     <button
                       onClick={() => setSelectedItem(null)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors text-2xl p-2 hover:bg-gray-100 rounded-full"
+                      className="text-gray-400 hover:text-gray-600 text-2xl p-2 hover:bg-gray-100 rounded-full"
                     >
                       ×
                     </button>
@@ -1058,13 +984,11 @@ export default function SciencePage() {
                         ? selectedItem?.youtube_url && (
                             <button
                               onClick={() => {
-                                if (selectedItem?.youtube_url) {
-                                  window.open(
-                                    selectedItem.youtube_url,
-                                    "_blank",
-                                  );
-                                  setSelectedItem(null);
-                                }
+                                window.open(
+                                  selectedItem.youtube_url!,
+                                  "_blank",
+                                );
+                                setSelectedItem(null);
                               }}
                               className="flex-1 bg-gradient-to-r from-red-600 to-red-700 text-white py-4 px-6 rounded-xl font-semibold hover:from-red-700 hover:to-red-800 transition-all flex items-center justify-center gap-3 shadow-lg"
                             >
@@ -1076,10 +1000,8 @@ export default function SciencePage() {
                         : selectedItem?.pdf_url && (
                             <button
                               onClick={() => {
-                                if (selectedItem) {
-                                  handleRead(selectedItem);
-                                  setSelectedItem(null);
-                                }
+                                handleRead(selectedItem);
+                                setSelectedItem(null);
                               }}
                               className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 px-6 rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all flex items-center justify-center gap-3 shadow-lg"
                             >
@@ -1091,10 +1013,8 @@ export default function SciencePage() {
                         selectedItem?.pdf_url && (
                           <button
                             onClick={() => {
-                              if (selectedItem) {
-                                handleDownload(selectedItem);
-                                setSelectedItem(null);
-                              }
+                              handleDownload(selectedItem);
+                              setSelectedItem(null);
                             }}
                             className="flex-1 border border-gray-300 text-gray-700 py-4 px-6 rounded-xl font-semibold hover:bg-gray-50 transition-all flex items-center justify-center gap-3"
                           >
@@ -1110,7 +1030,7 @@ export default function SciencePage() {
           </div>
         )}
 
-        {/* PDF Viewer for Books with view tracking */}
+        {/* PDF Viewer */}
         {selectedPDF && (
           <SimplePDFViewer
             item={selectedPDF}
@@ -1119,14 +1039,13 @@ export default function SciencePage() {
           />
         )}
 
-        {/* NEW: Comments Modal */}
+        {/* Comments Modal */}
         {commentsModalOpen && selectedCommentItem && (
           <ContentCommentsModal
             isOpen={commentsModalOpen}
             onClose={() => {
               setCommentsModalOpen(false);
               setSelectedCommentItem(null);
-              // Refresh comment counts when modal closes
               fetchItems();
             }}
             contentId={selectedCommentItem.id}

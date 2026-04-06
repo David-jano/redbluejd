@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import Image from "next/image";
+import ClientImage from "../componets/ClientImage";
 import { supabase } from "@/lib/supabase";
 import {
   FaEye,
@@ -53,6 +53,27 @@ interface Article {
   created_at: string;
 }
 
+// Helper function for Vercel image paths
+function getValidImageUrl(imageUrl: string | null | undefined): string {
+  if (!imageUrl) {
+    return "https://placehold.co/800x600/e0e0e0/999?text=No+Image";
+  }
+
+  if (imageUrl.startsWith("http")) {
+    return imageUrl;
+  }
+
+  if (imageUrl.startsWith("/images/")) {
+    return imageUrl.replace("/images/", "/uploads/");
+  }
+
+  if (imageUrl.startsWith("/uploads/")) {
+    return imageUrl;
+  }
+
+  return imageUrl;
+}
+
 export default function AdminDashboard() {
   // Article form state
   const [formData, setFormData] = useState({
@@ -82,33 +103,77 @@ export default function AdminDashboard() {
   const [loadingArticles, setLoadingArticles] = useState(false);
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
 
-  // Fetch all data on mount
+  // Fetch all data in parallel on mount
   useEffect(() => {
-    fetchStats();
-    fetchRecentComments();
-    fetchArticles();
+    fetchAllData();
   }, []);
+
+  const fetchAllData = async () => {
+    setLoadingStats(true);
+    setLoadingArticles(true);
+
+    try {
+      // Run all queries in parallel
+      const [
+        articlesCountResult,
+        commentsCountResult,
+        commentsResult,
+        articlesResult,
+      ] = await Promise.all([
+        supabase.from("articles").select("*", { count: "exact", head: true }),
+        supabase.from("comments").select("*", { count: "exact", head: true }),
+        supabase
+          .from("comments")
+          .select(
+            `
+            *,
+            replies:replies(count)
+          `,
+          )
+          .order("created_at", { ascending: false })
+          .limit(10),
+        supabase
+          .from("articles")
+          .select("*")
+          .order("created_at", { ascending: false }),
+      ]);
+
+      if (articlesCountResult.error) throw articlesCountResult.error;
+      if (commentsCountResult.error) throw commentsCountResult.error;
+      if (commentsResult.error) throw commentsResult.error;
+      if (articlesResult.error) throw articlesResult.error;
+
+      setArticleCount(articlesCountResult.count || 0);
+      setCommentCount(commentsCountResult.count || 0);
+
+      const commentsWithCount = (commentsResult.data || []).map((c: any) => ({
+        ...c,
+        replies_count: c.replies?.[0]?.count || 0,
+      }));
+      setRecentComments(commentsWithCount);
+      setArticles(articlesResult.data || []);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setLoadingStats(false);
+      setLoadingArticles(false);
+    }
+  };
 
   const fetchStats = async () => {
     try {
-      const { count: articles, error: articlesError } = await supabase
-        .from("articles")
-        .select("*", { count: "exact", head: true });
+      const [articlesResult, commentsResult] = await Promise.all([
+        supabase.from("articles").select("*", { count: "exact", head: true }),
+        supabase.from("comments").select("*", { count: "exact", head: true }),
+      ]);
 
-      if (articlesError) throw articlesError;
+      if (articlesResult.error) throw articlesResult.error;
+      if (commentsResult.error) throw commentsResult.error;
 
-      const { count: comments, error: commentsError } = await supabase
-        .from("comments")
-        .select("*", { count: "exact", head: true });
-
-      if (commentsError) throw commentsError;
-
-      setArticleCount(articles || 0);
-      setCommentCount(comments || 0);
+      setArticleCount(articlesResult.count || 0);
+      setCommentCount(commentsResult.count || 0);
     } catch (error) {
       console.error("Error fetching stats:", error);
-    } finally {
-      setLoadingStats(false);
     }
   };
 
@@ -160,8 +225,7 @@ export default function AdminDashboard() {
       const { error } = await supabase.from("comments").delete().eq("id", id);
       if (error) throw error;
 
-      fetchRecentComments();
-      fetchStats();
+      await Promise.all([fetchRecentComments(), fetchStats()]);
     } catch (error) {
       console.error("Error deleting comment:", error);
       alert("Failed to delete comment");
@@ -237,14 +301,12 @@ export default function AdminDashboard() {
     try {
       let response;
       if (editingArticle) {
-        // Update existing article
         response = await fetch(`/api/articles/${editingArticle.id}`, {
           method: "PUT",
           body: JSON.stringify(formData),
           headers: { "Content-Type": "application/json" },
         });
       } else {
-        // Create new article
         response = await fetch("/api/articles", {
           method: "POST",
           body: JSON.stringify(formData),
@@ -261,8 +323,7 @@ export default function AdminDashboard() {
 
       setSuccess(true);
       resetForm();
-      fetchArticles();
-      fetchStats();
+      await Promise.all([fetchArticles(), fetchStats()]);
       setTimeout(() => setSuccess(false), 3000);
     } catch (error: any) {
       alert("Network error: " + error.message);
@@ -281,7 +342,7 @@ export default function AdminDashboard() {
       imageUrl: article.image_url,
       content: article.content,
     });
-    setPreviewImage(article.image_url);
+    setPreviewImage(getValidImageUrl(article.image_url));
   };
 
   const handleDeleteArticle = async (id: number) => {
@@ -294,8 +355,7 @@ export default function AdminDashboard() {
 
       if (!response.ok) throw new Error("Delete failed");
 
-      fetchArticles();
-      fetchStats();
+      await Promise.all([fetchArticles(), fetchStats()]);
     } catch (error) {
       console.error("Error deleting article:", error);
       alert("Failed to delete article");
@@ -317,7 +377,6 @@ export default function AdminDashboard() {
   };
 
   const navigationItems = [
-    // Main Content
     {
       name: "Main Article",
       href: "/admin",
@@ -333,57 +392,41 @@ export default function AdminDashboard() {
       href: "/admin/cards",
       icon: <FaFile className="text-gray-600" />,
     },
-
-    // History Section
     {
       name: "Amateka",
       href: "/admin/amateka",
       icon: <FaHistory className="text-gray-600" />,
     },
-
-    // Science Section
     {
       name: "Siyansi",
       href: "/admin/siyanse",
       icon: <FaFlask className="text-gray-600" />,
     },
-
-    // Books Section
     {
       name: "Ibitabo",
       href: "/admin/ibitabo",
       icon: <FaBookOpen className="text-gray-600" />,
     },
-
-    // Health Section
     {
       name: "Ubuzima",
       href: "/admin/ubuzima",
       icon: <FaHeart className="text-gray-600" />,
     },
-
-    // Psychology Section
     {
       name: "Ubumenyamuntu",
       href: "/admin/ubumenyamuntu",
       icon: <FaBrain className="text-gray-600" />,
     },
-
-    // Arts Section
     {
       name: "Ubugeni",
       href: "/admin/ubugeni",
       icon: <FaPalette className="text-gray-600" />,
     },
-
-    // Documentaries Section
     {
       name: "Ibyegeranyo",
       href: "/admin/ibyegeranyo",
       icon: <FaFilm className="text-gray-600" />,
     },
-
-    // Philosophy Section
     {
       name: "Filozofiya",
       href: "/admin/philosophy",
@@ -405,7 +448,7 @@ export default function AdminDashboard() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-500">Welcome, RedBlue Jd</span>
+              <span className="text-sm text-gray-500">Welcome, RedBlue JD</span>
               <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white font-semibold">
                 JD
               </div>
@@ -426,27 +469,20 @@ export default function AdminDashboard() {
 
             {/* Main Content Group */}
             <div className="mb-4 mt-10">
-              {" "}
-              {/* Changed from mt-6 to mt-8 */}
               <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
                 Core
               </h3>
               <nav className="space-y-1">
-                {navigationItems.slice(0, 3).map((item) => {
-                  const isActive = pathname === item.href;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={
-                        "flex items-center gap-4 px-3 py-3 text-sm font-medium rounded-lg transition-all"
-                      }
-                    >
-                      <span className="text-lg">{item.icon}</span>
-                      <span className="font-medium">{item.name}</span>
-                    </Link>
-                  );
-                })}
+                {navigationItems.slice(0, 3).map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="flex items-center gap-4 px-3 py-3 text-sm font-medium rounded-lg transition-all text-gray-700 hover:bg-gray-50 hover:text-orange-600"
+                  >
+                    <span className="text-lg">{item.icon}</span>
+                    <span className="font-medium">{item.name}</span>
+                  </Link>
+                ))}
               </nav>
             </div>
 
@@ -456,23 +492,20 @@ export default function AdminDashboard() {
                 Educational
               </h3>
               <nav className="space-y-1">
-                {navigationItems.slice(3, 6).map((item) => {
-                  const isActive = pathname === item.href;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`flex items-center gap-4 px-3 py-3 text-sm font-medium rounded-lg transition-all ${
-                        isActive
-                          ? "bg-orange-50 text-orange-600 border-l-4 border-orange-500"
-                          : "text-gray-700 hover:bg-gray-50 hover:text-orange-600"
-                      }`}
-                    >
-                      <span className="text-lg">{item.icon}</span>
-                      <span className="font-medium">{item.name}</span>
-                    </Link>
-                  );
-                })}
+                {navigationItems.slice(3, 6).map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-4 px-3 py-3 text-sm font-medium rounded-lg transition-all ${
+                      pathname === item.href
+                        ? "bg-orange-50 text-orange-600 border-l-4 border-orange-500"
+                        : "text-gray-700 hover:bg-gray-50 hover:text-orange-600"
+                    }`}
+                  >
+                    <span className="text-lg">{item.icon}</span>
+                    <span className="font-medium">{item.name}</span>
+                  </Link>
+                ))}
               </nav>
             </div>
 
@@ -482,23 +515,20 @@ export default function AdminDashboard() {
                 Humanities
               </h3>
               <nav className="space-y-1">
-                {navigationItems.slice(6, 9).map((item) => {
-                  const isActive = pathname === item.href;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`flex items-center gap-4 px-3 py-3 text-sm font-medium rounded-lg transition-all ${
-                        isActive
-                          ? "bg-orange-50 text-orange-600 border-l-4 border-orange-500"
-                          : "text-gray-700 hover:bg-gray-50 hover:text-orange-600"
-                      }`}
-                    >
-                      <span className="text-lg">{item.icon}</span>
-                      <span className="font-medium">{item.name}</span>
-                    </Link>
-                  );
-                })}
+                {navigationItems.slice(6, 9).map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-4 px-3 py-3 text-sm font-medium rounded-lg transition-all ${
+                      pathname === item.href
+                        ? "bg-orange-50 text-orange-600 border-l-4 border-orange-500"
+                        : "text-gray-700 hover:bg-gray-50 hover:text-orange-600"
+                    }`}
+                  >
+                    <span className="text-lg">{item.icon}</span>
+                    <span className="font-medium">{item.name}</span>
+                  </Link>
+                ))}
               </nav>
             </div>
 
@@ -508,23 +538,20 @@ export default function AdminDashboard() {
                 Media
               </h3>
               <nav className="space-y-1">
-                {navigationItems.slice(9).map((item) => {
-                  const isActive = pathname === item.href;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`flex items-center gap-4 px-3 py-3 text-sm font-medium rounded-lg transition-all ${
-                        isActive
-                          ? "bg-orange-50 text-orange-600 border-l-4 border-orange-500"
-                          : "text-gray-700 hover:bg-gray-50 hover:text-orange-600"
-                      }`}
-                    >
-                      <span className="text-lg">{item.icon}</span>
-                      <span className="font-medium">{item.name}</span>
-                    </Link>
-                  );
-                })}
+                {navigationItems.slice(9).map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-4 px-3 py-3 text-sm font-medium rounded-lg transition-all ${
+                      pathname === item.href
+                        ? "bg-orange-50 text-orange-600 border-l-4 border-orange-500"
+                        : "text-gray-700 hover:bg-gray-50 hover:text-orange-600"
+                    }`}
+                  >
+                    <span className="text-lg">{item.icon}</span>
+                    <span className="font-medium">{item.name}</span>
+                  </Link>
+                ))}
               </nav>
             </div>
           </div>
@@ -533,7 +560,7 @@ export default function AdminDashboard() {
         {/* Main Content */}
         <main className="flex-1 ml-64 p-8">
           <div className="max-w-6xl mx-auto">
-            {/* Epic Breadcrumb Navigation */}
+            {/* Breadcrumb Navigation */}
             <nav className="mb-8 mt-10">
               <ol
                 className="flex items-center space-x-2 text-sm"
@@ -553,7 +580,6 @@ export default function AdminDashboard() {
                     </span>
                   </Link>
                 </li>
-
                 <li className="flex items-center">
                   <svg
                     className="w-5 h-5 text-gray-400"
@@ -568,7 +594,7 @@ export default function AdminDashboard() {
                   </svg>
                 </li>
                 <li>
-                  <div className="flex items-center gap-2 px-3 py-2 bg-linear-to-r from-orange-50 to-amber-50 ">
+                  <div className="flex items-center gap-2 px-3 py-2 bg-linear-to-r from-orange-50 to-amber-50">
                     <span className="font-semibold text-black">
                       New Article
                     </span>
@@ -579,7 +605,6 @@ export default function AdminDashboard() {
                 </li>
               </ol>
 
-              {/* Optional: Page Title with Action Buttons */}
               <div className="flex justify-between items-center mt-4">
                 <div>
                   <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -608,7 +633,6 @@ export default function AdminDashboard() {
                     </svg>
                     Quick Actions
                   </button>
-
                   <button className="px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all flex items-center gap-2 text-sm shadow-md hover:shadow-lg">
                     <svg
                       className="w-4 h-4"
@@ -641,7 +665,6 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                {/* Total Articles */}
                 <div className="bg-gradient-to-br from-blue-600 to-blue-600 rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-200">
                   <div className="flex items-center justify-between">
                     <div>
@@ -672,7 +695,6 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Total Comments */}
                 <div className="bg-gradient-to-br from-green-600 to-green-600 rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-200">
                   <div className="flex items-center justify-between">
                     <div>
@@ -703,7 +725,6 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* New Today */}
                 <div className="bg-gradient-to-br from-purple-600 to-purple-600 rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-200">
                   <div className="flex items-center justify-between">
                     <div>
@@ -734,7 +755,6 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Pending Reviews */}
                 <div className="bg-gradient-to-br from-amber-600 to-amber-600 rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform duration-200">
                   <div className="flex items-center justify-between">
                     <div>
@@ -797,7 +817,6 @@ export default function AdminDashboard() {
                 )}
 
                 <div className="grid grid-cols-1 gap-6">
-                  {/* Title */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Title <span className="text-red-500">*</span>
@@ -812,7 +831,6 @@ export default function AdminDashboard() {
                     />
                   </div>
 
-                  {/* Description */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Description <span className="text-red-500">*</span>
@@ -827,7 +845,6 @@ export default function AdminDashboard() {
                     />
                   </div>
 
-                  {/* Author and Category Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -901,13 +918,14 @@ export default function AdminDashboard() {
                       )}
                     </div>
 
-                    {/* Image Preview */}
                     {(previewImage || formData.imageUrl) && (
                       <div className="mt-4">
                         <p className="text-xs text-gray-500 mb-2">Preview:</p>
                         <div className="relative w-40 h-40 rounded-lg border border-gray-200 overflow-hidden bg-gray-100">
-                          <Image
-                            src={previewImage || formData.imageUrl}
+                          <ClientImage
+                            src={getValidImageUrl(
+                              previewImage || formData.imageUrl,
+                            )}
                             alt="Preview"
                             fill
                             className="object-cover"
@@ -916,7 +934,6 @@ export default function AdminDashboard() {
                       </div>
                     )}
 
-                    {/* URL Input (fallback) */}
                     <div className="mt-3">
                       <label className="block text-xs text-gray-500 mb-1">
                         Or enter image URL directly:
@@ -931,7 +948,6 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Content */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Article Content <span className="text-red-500">*</span>
@@ -947,7 +963,6 @@ export default function AdminDashboard() {
                     />
                   </div>
 
-                  {/* Form Actions */}
                   <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                     <div>
                       {success && (
@@ -999,9 +1014,8 @@ export default function AdminDashboard() {
               </form>
             </div>
 
-            {/* Epic Articles List */}
+            {/* Articles List */}
             <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden mb-8">
-              {/* Header with actions */}
               <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <h2 className="font-semibold text-gray-700 flex items-center gap-2">
@@ -1013,39 +1027,6 @@ export default function AdminDashboard() {
                       {articles.length} total
                     </span>
                   </h2>
-
-                  <div className="flex items-center gap-2">
-                    <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition">
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-                        />
-                      </svg>
-                    </button>
-                    <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition">
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M4 6h16M4 12h16M4 18h16"
-                        />
-                      </svg>
-                    </button>
-                  </div>
                 </div>
               </div>
 
@@ -1106,31 +1087,8 @@ export default function AdminDashboard() {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-4 text-left">
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
-                            />
-                          </div>
-                        </th>
                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                          <div className="flex items-center gap-1 cursor-pointer hover:text-gray-700">
-                            Title
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
-                              />
-                            </svg>
-                          </div>
+                          Title
                         </th>
                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                           Author
@@ -1139,22 +1097,7 @@ export default function AdminDashboard() {
                           Category
                         </th>
                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                          <div className="flex items-center gap-1 cursor-pointer hover:text-gray-700">
-                            Date
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                              />
-                            </svg>
-                          </div>
+                          Date
                         </th>
                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                           Status
@@ -1165,20 +1108,14 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {articles.map((article, index) => (
+                      {articles.map((article) => (
                         <tr
                           key={article.id}
                           className="hover:bg-gray-50 transition-colors group"
                         >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <input
-                              type="checkbox"
-                              className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
-                            />
-                          </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                              <div className="w-10 h-10 bg-gray-900 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm">
                                 {article.title.charAt(0)}
                               </div>
                               <div>
@@ -1203,9 +1140,9 @@ export default function AdminDashboard() {
                               </span>
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-10 py-4 whitespace-nowrap">
                             <span
-                              className="px-2.5 py-1 inline-flex text-xs leading-4 font-medium rounded-full"
+                              className="px-8 py-1 inline-flex text-xs leading-4 font-medium rounded-full"
                               style={{
                                 backgroundColor:
                                   article.label === "Politiki"
@@ -1308,7 +1245,6 @@ export default function AdminDashboard() {
                     </tbody>
                   </table>
 
-                  {/* Table Footer with Pagination */}
                   <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
                     <div className="flex items-center justify-between">
                       <div className="text-sm text-gray-500">
@@ -1391,8 +1327,8 @@ export default function AdminDashboard() {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 relative rounded-full overflow-hidden bg-gray-200">
-                                <Image
-                                  src={comment.avatar}
+                                <ClientImage
+                                  src={getValidImageUrl(comment.avatar)}
                                   alt={comment.name}
                                   fill
                                   className="object-cover"
@@ -1444,7 +1380,6 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {/* View All Link */}
               <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 text-right">
                 <Link
                   href="/admin/comments"

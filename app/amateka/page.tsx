@@ -27,7 +27,7 @@ import {
   Loader2,
 } from "lucide-react";
 
-
+import ClientImage from "../componets/ClientImage";
 interface HistoryItem {
   id: number;
   title: string;
@@ -50,9 +50,29 @@ interface HistoryItem {
   is_new?: boolean;
   rating?: number;
   pdf_url?: string | null;
-  // NEW: Add comment and like counts
   comment_count?: number;
   like_count?: number;
+}
+
+// Helper function for Vercel image paths
+function getValidImageUrl(imageUrl: string | null | undefined): string {
+  if (!imageUrl) {
+    return "https://placehold.co/800x600/e0e0e0/999?text=No+Image";
+  }
+  
+  if (imageUrl.startsWith('http')) {
+    return imageUrl;
+  }
+  
+  if (imageUrl.startsWith('/images/')) {
+    return imageUrl.replace('/images/', '/uploads/');
+  }
+  
+  if (imageUrl.startsWith('/uploads/')) {
+    return imageUrl;
+  }
+  
+  return imageUrl;
 }
 
 const SimplePDFViewer = ({
@@ -66,7 +86,6 @@ const SimplePDFViewer = ({
 }) => {
   const pdfUrl = item.pdf_url || "";
 
-  // Track view when PDF viewer opens
   useEffect(() => {
     if (onViewTracked) {
       onViewTracked();
@@ -81,18 +100,8 @@ const SimplePDFViewer = ({
             onClick={onClose}
             className="p-2 hover:bg-stone-100 rounded-full"
           >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
           <h2 className="text-lg font-bold">{item.title}</h2>
@@ -127,22 +136,13 @@ export default function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPeriod, setSelectedPeriod] = useState("all");
   const [selectedRegion, setSelectedRegion] = useState("all");
-  const [selectedType, setSelectedType] = useState<
-    "all" | "book" | "documentary"
-  >("all");
+  const [selectedType, setSelectedType] = useState<"all" | "book" | "documentary">("all");
   const [sortBy, setSortBy] = useState("newest");
   const [selectedItem, setSelectedItem] = useState<HistoryItem | null>(null);
-  const [activeTab, setActiveTab] = useState<"books" | "documentaries">(
-    "books",
-  );
+  const [activeTab, setActiveTab] = useState<"books" | "documentaries">("books");
   const [selectedPDF, setSelectedPDF] = useState<HistoryItem | null>(null);
-
-  // NEW: State for comments modal
   const [commentsModalOpen, setCommentsModalOpen] = useState(false);
-  const [selectedCommentItem, setSelectedCommentItem] =
-    useState<HistoryItem | null>(null);
-
-  // State for fetched data
+  const [selectedCommentItem, setSelectedCommentItem] = useState<HistoryItem | null>(null);
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -153,77 +153,58 @@ export default function HistoryPage() {
   });
 
   const periods: string[] = [
-    "all",
-    "Ancient",
-    "Medieval",
-    "Renaissance",
-    "Modern",
-    "World Wars",
-    "Cold War",
-    "Contemporary",
-    "Prehistoric",
+    "all", "Ancient", "Medieval", "Renaissance", "Modern",
+    "World Wars", "Cold War", "Contemporary", "Prehistoric",
   ];
 
   const regions: string[] = [
-    "all",
-    "Global",
-    "Europe",
-    "Asia",
-    "Africa",
-    "Americas",
-    "Middle East",
-    "Oceania",
-    "Ancient Civilizations",
+    "all", "Global", "Europe", "Asia", "Africa", "Americas",
+    "Middle East", "Oceania", "Ancient Civilizations",
   ];
 
-  // Fetch data from Supabase
   useEffect(() => {
     fetchItems();
   }, []);
 
-  // Enhanced fetchItems to also get comment and like counts
+  // OPTIMIZED: Parallel fetching for items, comments, and likes
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("history_items")
-        .select("*")
-        .order("created_at", { ascending: false });
+      // Run all queries in parallel
+      const [itemsResult, commentsResult, likesResult] = await Promise.all([
+        supabase
+          .from("history_items")
+          .select("*")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("content_comments")
+          .select("content_id")
+          .eq("content_type", "history"),
+        supabase
+          .from("content_likes")
+          .select("content_id")
+          .eq("content_type", "history")
+      ]);
 
-      if (error) throw error;
-
-      // Fetch comment counts for all items
-      const { data: commentData, error: commentError } = await supabase
-        .from("content_comments")
-        .select("content_id")
-        .eq("content_type", "history");
-
-      // Fetch like counts for all items
-      const { data: likeData, error: likeError } = await supabase
-        .from("content_likes")
-        .select("content_id")
-        .eq("content_type", "history");
+      if (itemsResult.error) throw itemsResult.error;
 
       // Create maps for counts
       const commentMap = new Map();
-      if (commentData) {
-        commentData.forEach((item: any) => {
-          commentMap.set(
-            item.content_id,
-            (commentMap.get(item.content_id) || 0) + 1,
-          );
+      if (commentsResult.data) {
+        commentsResult.data.forEach((item: any) => {
+          commentMap.set(item.content_id, (commentMap.get(item.content_id) || 0) + 1);
         });
       }
 
       const likeMap = new Map();
-      if (likeData) {
-        likeData.forEach((item: any) => {
+      if (likesResult.data) {
+        likesResult.data.forEach((item: any) => {
           likeMap.set(item.content_id, (likeMap.get(item.content_id) || 0) + 1);
         });
       }
 
       // Merge counts with items
-      const itemsWithCounts = (data || []).map((item) => ({
+      const itemsWithCounts = (itemsResult.data || []).map((item) => ({
         ...item,
         comment_count: commentMap.get(item.id) || 0,
         like_count: likeMap.get(item.id) || 0,
@@ -252,12 +233,9 @@ export default function HistoryPage() {
     });
   };
 
-  // VIEW TRACKING FUNCTION
   const trackView = async (item: HistoryItem) => {
     try {
       const newViews = (item.views || 0) + 1;
-
-      // Update in database
       const { error } = await supabase
         .from("history_items")
         .update({ views: newViews })
@@ -265,59 +243,40 @@ export default function HistoryPage() {
 
       if (error) throw error;
 
-      // Update local state
       setItems((prevItems) =>
-        prevItems.map((i) =>
-          i.id === item.id ? { ...i, views: newViews } : i,
-        ),
+        prevItems.map((i) => i.id === item.id ? { ...i, views: newViews } : i)
       );
 
-      // Update stats
       setStats((prev) => ({
         ...prev,
         totalViews: prev.totalViews + 1,
       }));
-
-      console.log(`View tracked for: ${item.title} (Total: ${newViews})`);
-      return true;
     } catch (error) {
       console.error("Error tracking view:", error);
-      return false;
     }
   };
 
-  // Filter and sort items
   const getFilteredItems = () => {
     let filtered = items.filter((item) => {
       const matchesSearch =
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.author?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        false ||
         item.narrator?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         false;
 
-      const matchesPeriod =
-        selectedPeriod === "all" || item.period === selectedPeriod;
-      const matchesRegion =
-        selectedRegion === "all" || item.region === selectedRegion;
+      const matchesPeriod = selectedPeriod === "all" || item.period === selectedPeriod;
+      const matchesRegion = selectedRegion === "all" || item.region === selectedRegion;
       const matchesType = selectedType === "all" || item.type === selectedType;
 
       return matchesSearch && matchesPeriod && matchesRegion && matchesType;
     });
 
-    // Sort items
     filtered = [...filtered].sort((a, b) => {
       switch (sortBy) {
         case "newest":
-          return (
-            new Date(b.published_date).getTime() -
-            new Date(a.published_date).getTime()
-          );
+          return new Date(b.published_date).getTime() - new Date(a.published_date).getTime();
         case "oldest":
-          return (
-            new Date(a.published_date).getTime() -
-            new Date(b.published_date).getTime()
-          );
+          return new Date(a.published_date).getTime() - new Date(b.published_date).getTime();
         case "views":
           return (b.views || 0) - (a.views || 0);
         case "title":
@@ -332,16 +291,11 @@ export default function HistoryPage() {
 
   const filteredItems = getFilteredItems();
   const books = filteredItems.filter((item) => item.type === "book");
-  const documentaries = filteredItems.filter(
-    (item) => item.type === "documentary",
-  );
+  const documentaries = filteredItems.filter((item) => item.type === "documentary");
   const activeItems = activeTab === "books" ? books : documentaries;
 
-  // 🔥 UPDATED HANDLERS WITH VIEW TRACKING
   const handleItemClick = async (item: HistoryItem) => {
-    // Track view when item is clicked
     await trackView(item);
-
     if (item.type === "book" && item.pdf_url) {
       setSelectedPDF(item);
     } else {
@@ -350,9 +304,7 @@ export default function HistoryPage() {
   };
 
   const handlePlay = async (item: HistoryItem) => {
-    // Track view when documentary is played
     await trackView(item);
-
     if (item.type === "documentary" && item.youtube_url) {
       window.open(item.youtube_url, "_blank");
     }
@@ -361,43 +313,29 @@ export default function HistoryPage() {
   const handleDownload = (item: HistoryItem) => {
     if (item.type === "book" && item.pdf_url) {
       window.open(item.pdf_url, "_blank");
-    } else {
-      alert(`Download not available for this item`);
     }
   };
 
   const handleRead = async (item: HistoryItem) => {
-    // Track view when PDF is opened
     await trackView(item);
-
     if (item.pdf_url) {
       setSelectedPDF(item);
     }
   };
 
-  // 🔥 TRACK VIEW WHEN PDF VIEWER OPENS
   const handlePDFViewTracked = async () => {
     if (selectedPDF) {
       await trackView(selectedPDF);
     }
   };
 
-  // NEW: Handle opening comments modal
   const handleOpenComments = (item: HistoryItem, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent triggering the card click
+    e.stopPropagation();
     setSelectedCommentItem(item);
     setCommentsModalOpen(true);
   };
 
-  const StatCard = ({
-    icon: Icon,
-    label,
-    value,
-  }: {
-    icon: any;
-    label: string;
-    value: string;
-  }) => (
+  const StatCard = ({ icon: Icon, label, value }: { icon: any; label: string; value: string }) => (
     <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 shadow-sm border border-gray-200">
       <div className="flex items-center gap-3">
         <div className="p-2 bg-blue-50 rounded-lg">
@@ -425,7 +363,7 @@ export default function HistoryPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 to-amber-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header - UNCHANGED */}
+        {/* Header */}
         <div className="text-center mb-12">
           <div className="flex justify-center mb-6">
             <div className="relative">
@@ -446,31 +384,15 @@ export default function HistoryPage() {
           </p>
         </div>
 
-        {/* Stats Section - UNCHANGED */}
+        {/* Stats Section */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <StatCard
-            icon={BookOpen}
-            label="Ibitabo by’Amateka"
-            value={stats.totalBooks.toString()}
-          />
-          <StatCard
-            icon={Film}
-            label="Dokumanteri"
-            value={stats.totalDocumentaries.toString()}
-          />
-          <StatCard
-            icon={Globe}
-            label="Imico n’Umuco"
-            value={stats.totalRegions.toString()}
-          />
-          <StatCard
-            icon={Eye}
-            label="Total Views"
-            value={stats.totalViews.toLocaleString()}
-          />
+          <StatCard icon={BookOpen} label="Ibitabo by'Amateka" value={stats.totalBooks.toString()} />
+          <StatCard icon={Film} label="Dokumanteri" value={stats.totalDocumentaries.toString()} />
+          <StatCard icon={Globe} label="Imico n'Umuco" value={stats.totalRegions.toString()} />
+          <StatCard icon={Eye} label="Total Views" value={stats.totalViews.toLocaleString()} />
         </div>
 
-        {/* Search & Filters - UNCHANGED */}
+        {/* Search & Filters */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-6 mb-8 border border-stone-200">
           <div className="flex flex-col lg:flex-row gap-6">
             <div className="flex-1 relative">
@@ -486,28 +408,25 @@ export default function HistoryPage() {
               />
             </div>
 
-            {/* Filters */}
             <div className="flex flex-wrap gap-4 items-center">
               <div className="relative">
                 <select
                   value={selectedType}
                   onChange={(e) => setSelectedType(e.target.value as any)}
-                  className="appearance-none bg-white border border-stone-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200"
+                  className="appearance-none bg-white border border-stone-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
                 >
                   <option value="all">Byose</option>
                   <option value="book">Ibitabo gusa</option>
                   <option value="documentary">Ibyegeranyo gusa</option>
                 </select>
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <ChevronDown className="h-4 w-4 text-gray-400" />
-                </div>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
 
               <div className="relative">
                 <select
                   value={selectedPeriod}
                   onChange={(e) => setSelectedPeriod(e.target.value)}
-                  className="appearance-none bg-white border border-stone-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200"
+                  className="appearance-none bg-white border border-stone-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-amber-500"
                 >
                   {periods.map((period) => (
                     <option key={period} value={period}>
@@ -515,16 +434,14 @@ export default function HistoryPage() {
                     </option>
                   ))}
                 </select>
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <ChevronDown className="h-4 w-4 text-gray-400" />
-                </div>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
 
               <div className="relative">
                 <select
                   value={selectedRegion}
                   onChange={(e) => setSelectedRegion(e.target.value)}
-                  className="appearance-none bg-white border border-stone-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200"
+                  className="appearance-none bg-white border border-stone-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-amber-500"
                 >
                   {regions.map((region) => (
                     <option key={region} value={region}>
@@ -532,45 +449,36 @@ export default function HistoryPage() {
                     </option>
                   ))}
                 </select>
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <ChevronDown className="h-4 w-4 text-gray-400" />
-                </div>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
 
               <div className="relative">
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="appearance-none bg-white border border-stone-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200"
+                  className="appearance-none bg-white border border-stone-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-amber-500"
                 >
                   <option value="newest">Ibishya mbere</option>
                   <option value="oldest">Ibishaje mbere</option>
                   <option value="views">Ibyarebwe cyane</option>
-                  <option value="rating">Ibyakunzwe cyane</option>
                   <option value="title">Kuva A-Z</option>
                 </select>
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <ChevronDown className="h-4 w-4 text-gray-400" />
-                </div>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
 
               <div className="flex bg-stone-100 rounded-xl p-1">
                 <button
                   onClick={() => setViewMode("grid")}
-                  className={`p-2 rounded-lg transition-all duration-200 ${
-                    viewMode === "grid"
-                      ? "bg-white shadow-sm text-amber-600"
-                      : "text-stone-500 hover:text-stone-700"
+                  className={`p-2 rounded-lg transition-all ${
+                    viewMode === "grid" ? "bg-white shadow-sm text-amber-600" : "text-stone-500"
                   }`}
                 >
                   <Grid className="w-5 h-5" />
                 </button>
                 <button
                   onClick={() => setViewMode("list")}
-                  className={`p-2 rounded-lg transition-all duration-200 ${
-                    viewMode === "list"
-                      ? "bg-white shadow-sm text-amber-600"
-                      : "text-stone-500 hover:text-stone-700"
+                  className={`p-2 rounded-lg transition-all ${
+                    viewMode === "list" ? "bg-white shadow-sm text-amber-600" : "text-stone-500"
                   }`}
                 >
                   <List className="w-5 h-5" />
@@ -580,16 +488,16 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        {/* Content Tabs - UNCHANGED */}
+        {/* Content Tabs */}
         <div className="mb-8">
           <div className="border-b border-stone-200">
             <nav className="-mb-px flex space-x-8">
               <button
                 onClick={() => setActiveTab("books")}
-                className={`py-3 px-1 border-b-2 font-medium text-lg transition-colors duration-200 flex items-center gap-2 ${
+                className={`py-3 px-1 border-b-2 font-medium text-lg transition-colors flex items-center gap-2 ${
                   activeTab === "books"
                     ? "border-amber-600 text-amber-600"
-                    : "border-transparent text-stone-500 hover:text-stone-700 hover:border-stone-300"
+                    : "border-transparent text-stone-500 hover:text-stone-700"
                 }`}
               >
                 <BookOpen className="w-5 h-5" />
@@ -600,10 +508,10 @@ export default function HistoryPage() {
               </button>
               <button
                 onClick={() => setActiveTab("documentaries")}
-                className={`py-3 px-1 border-b-2 font-medium text-lg transition-colors duration-200 flex items-center gap-2 ${
+                className={`py-3 px-1 border-b-2 font-medium text-lg transition-colors flex items-center gap-2 ${
                   activeTab === "documentaries"
                     ? "border-amber-600 text-amber-600"
-                    : "border-transparent text-stone-500 hover:text-stone-700 hover:border-stone-300"
+                    : "border-transparent text-stone-500 hover:text-stone-700"
                 }`}
               >
                 <Film className="w-5 h-5" />
@@ -616,27 +524,17 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        {/* Content Grid - UPDATED with comment and like badges near views */}
+        {/* Content Grid */}
         {activeItems.length === 0 ? (
           <div className="text-center py-16">
             <div className="w-24 h-24 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <Search className="w-12 h-12 text-stone-400" />
             </div>
-            <h3 className="text-2xl font-bold text-stone-900 mb-2">
-              No historical content found
-            </h3>
-            <p className="text-stone-600">
-              Try adjusting your search or filters to explore our collection
-            </p>
+            <h3 className="text-2xl font-bold text-stone-900 mb-2">No historical content found</h3>
+            <p className="text-stone-600">Try adjusting your search or filters to explore our collection</p>
           </div>
         ) : (
-          <div
-            className={`${
-              viewMode === "grid"
-                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-                : "space-y-6"
-            }`}
-          >
+          <div className={viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" : "space-y-6"}>
             {activeItems.map((item) => (
               <div
                 key={item.id}
@@ -645,88 +543,56 @@ export default function HistoryPage() {
                 }`}
                 onClick={() => handleItemClick(item)}
               >
-                {/* Cover Image with Type Badge */}
-                <div
-                  className={`relative overflow-hidden bg-gradient-to-br from-stone-100 to-amber-100 ${
-                    viewMode === "list" ? "w-40 flex-shrink-0" : "h-48"
-                  }`}
-                >
+                {/* Cover Image */}
+                <div className={`relative overflow-hidden bg-gradient-to-br from-stone-100 to-amber-100 ${viewMode === "list" ? "w-40 flex-shrink-0" : "h-48"}`}>
                   <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent z-10" />
-
-                  {/* Custom Cover Image */}
                   <div className="relative w-full h-full">
-                    <Image
-                      src={item.cover_image}
+                    <ClientImage
+                      src={getValidImageUrl(item.cover_image)}
                       alt={item.title}
                       fill
                       className="object-cover transition-transform duration-300 group-hover:scale-105"
-                      sizes={
-                        viewMode === "list"
-                          ? "160px"
-                          : "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
-                      }
+                      sizes={viewMode === "list" ? "160px" : "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"}
                     />
                   </div>
 
-                  {/* Type Badge */}
                   <div className="absolute top-3 left-3 z-20">
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-bold text-white shadow-lg ${
-                        item.type === "book"
-                          ? "bg-gradient-to-r from-amber-500 to-orange-500"
-                          : "bg-gradient-to-r from-blue-500 to-purple-500"
-                      }`}
-                    >
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold text-white shadow-lg ${
+                      item.type === "book" ? "bg-gradient-to-r from-amber-500 to-orange-500" : "bg-gradient-to-r from-blue-500 to-purple-500"
+                    }`}>
                       {item.type === "book" ? "Book" : "Documentary"}
                     </span>
                   </div>
 
-                  {/* Featured/New Badges */}
                   <div className="absolute top-3 right-3 z-20 space-y-2">
                     {item.is_featured && (
-                      <span className="bg-gradient-to-r from-red-500 to-pink-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
-                        Featured
-                      </span>
+                      <span className="bg-gradient-to-r from-red-500 to-pink-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">Featured</span>
                     )}
                     {item.is_new && (
-                      <span className="bg-gradient-to-r from-green-500 to-emerald-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
-                        New
-                      </span>
+                      <span className="bg-gradient-to-r from-green-500 to-emerald-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">New</span>
                     )}
                   </div>
 
-                  {/* Quick Action Overlay */}
-                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-30">
+                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30">
                     <div className="flex gap-3">
                       {item.type === "documentary" ? (
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handlePlay(item);
-                          }}
+                          onClick={(e) => { e.stopPropagation(); handlePlay(item); }}
                           className="bg-red-600 text-white p-4 rounded-full hover:bg-red-700 transition-all transform hover:scale-110"
                         >
                           <Play className="w-6 h-6" fill="white" />
                         </button>
-                      ) : (
-                        item.pdf_url && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRead(item);
-                            }}
-                            className="bg-green-600 text-white p-4 rounded-full hover:bg-green-700 transition-all transform hover:scale-110"
-                          >
-                            <BookOpen className="w-6 h-6" />
-                          </button>
-                        )
+                      ) : item.pdf_url && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRead(item); }}
+                          className="bg-green-600 text-white p-4 rounded-full hover:bg-green-700 transition-all transform hover:scale-110"
+                        >
+                          <BookOpen className="w-6 h-6" />
+                        </button>
                       )}
                       {item.type === "book" && item.pdf_url && (
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDownload(item);
-                          }}
+                          onClick={(e) => { e.stopPropagation(); handleDownload(item); }}
                           className="bg-blue-600 text-white p-4 rounded-full hover:bg-blue-700 transition-all transform hover:scale-110"
                         >
                           <Download className="w-6 h-6" />
@@ -737,11 +603,7 @@ export default function HistoryPage() {
                 </div>
 
                 {/* Content Info */}
-                <div
-                  className={`p-4 flex-1 flex flex-col ${
-                    viewMode === "list" ? "flex-1" : ""
-                  }`}
-                >
+                <div className={`p-4 flex-1 flex flex-col ${viewMode === "list" ? "flex-1" : ""}`}>
                   <div className="mb-3 flex-1">
                     <h3 className="font-bold text-lg text-stone-900 line-clamp-2 mb-2 group-hover:text-amber-700 transition-colors">
                       {item.title}
@@ -752,67 +614,48 @@ export default function HistoryPage() {
                         {item.type === "book" ? (
                           <>
                             <User className="w-4 h-4 mr-1 flex-shrink-0" />
-                            <span className="text-sm font-medium truncate">
-                              {item.author || "Unknown"}
-                            </span>
+                            <span className="text-sm font-medium truncate">{item.author || "Unknown"}</span>
                           </>
                         ) : (
                           <>
                             <Film className="w-4 h-4 mr-1 flex-shrink-0" />
-                            <span className="text-sm font-medium truncate">
-                              {item.narrator || "Unknown"}
-                            </span>
+                            <span className="text-sm font-medium truncate">{item.narrator || "Unknown"}</span>
                           </>
                         )}
                       </div>
 
-                      {/* Stats row with views, likes, and comments */}
                       <div className="flex items-center gap-3 text-sm text-gray-500">
                         <div className="flex items-center gap-1">
                           <Eye className="w-4 h-4" />
                           <span>{item.views?.toLocaleString() || 0}</span>
                         </div>
 
-                        {/* Card Like Button - Directly on the card */}
                         <CardLikeButton
                           contentId={item.id}
                           contentType="science"
                           initialCount={item.like_count || 0}
                           onLikeChange={(newCount) => {
-                            // Update the item's like count in local state
                             setItems((prevItems) =>
-                              prevItems.map((i) =>
-                                i.id === item.id
-                                  ? { ...i, like_count: newCount }
-                                  : i,
-                              ),
+                              prevItems.map((i) => i.id === item.id ? { ...i, like_count: newCount } : i)
                             );
                           }}
                         />
 
-                        <button
-                          onClick={(e) => handleOpenComments(item, e)}
-                          className="flex items-center gap-1 hover:text-blue-600 transition-colors"
-                        >
+                        <button onClick={(e) => handleOpenComments(item, e)} className="flex items-center gap-1 hover:text-blue-600 transition-colors">
                           <FaComment className="w-4 h-4" />
                           <span>{item.comment_count || 0}</span>
                         </button>
                       </div>
                     </div>
 
-                    <p className="text-stone-600 text-sm line-clamp-2 mb-3">
-                      {item.description}
-                    </p>
+                    <p className="text-stone-600 text-sm line-clamp-2 mb-3">{item.description}</p>
                   </div>
 
-                  {/* Meta Info */}
                   <div className="pt-3 border-t border-stone-100">
                     <div className="flex items-center justify-between text-sm text-stone-500 mb-2">
                       <div className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
-                        <span>
-                          {new Date(item.published_date).getFullYear()}
-                        </span>
+                        <span>{new Date(item.published_date).getFullYear()}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <Globe className="w-3 h-3" />
@@ -822,13 +665,9 @@ export default function HistoryPage() {
 
                     <div className="flex flex-wrap items-center justify-between">
                       <div className="flex items-center gap-1">
-                        <span className="bg-stone-100 text-stone-700 text-xs px-2 py-1 rounded-full">
-                          {item.period}
-                        </span>
+                        <span className="bg-stone-100 text-stone-700 text-xs px-2 py-1 rounded-full">{item.period}</span>
                         {item.type === "book" && item.pages && (
-                          <span className="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-full">
-                            {item.pages}p
-                          </span>
+                          <span className="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-full">{item.pages}p</span>
                         )}
                         {item.type === "documentary" && item.duration && (
                           <span className="flex items-center gap-1 bg-purple-50 text-purple-700 text-xs px-2 py-1 rounded-full">
@@ -838,23 +677,11 @@ export default function HistoryPage() {
                         )}
                       </div>
 
-                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                        <button
-                          className="p-1 hover:bg-stone-100 rounded-full transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Add to bookmarks functionality
-                          }}
-                        >
+                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button className="p-1 hover:bg-stone-100 rounded-full" onClick={(e) => e.stopPropagation()}>
                           <Bookmark className="w-4 h-4 text-stone-400 hover:text-stone-600" />
                         </button>
-                        <button
-                          className="p-1 hover:bg-stone-100 rounded-full transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Share functionality
-                          }}
-                        >
+                        <button className="p-1 hover:bg-stone-100 rounded-full" onClick={(e) => e.stopPropagation()}>
                           <Share2 className="w-4 h-4 text-stone-400 hover:text-stone-600" />
                         </button>
                       </div>
@@ -866,169 +693,110 @@ export default function HistoryPage() {
           </div>
         )}
 
-        {/* Detail Modal - REMOVED comments from here */}
+        {/* Detail Modal */}
         {selectedItem && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
               <div className="flex flex-col lg:flex-row">
-                {/* Cover Image */}
                 <div className="lg:w-2/5 p-8 bg-gradient-to-br from-stone-50 to-amber-50">
                   <div className="relative aspect-[3/4] rounded-2xl overflow-hidden shadow-xl">
-                    <Image
-                      src={selectedItem.cover_image}
+                    <ClientImage
+                      src={getValidImageUrl(selectedItem.cover_image)}
                       alt={selectedItem.title}
                       fill
                       className="object-cover"
                     />
                     <div className="absolute bottom-4 left-4">
-                      <span
-                        className={`px-4 py-2 rounded-full text-sm font-bold text-white shadow-lg ${
-                          selectedItem.type === "book"
-                            ? "bg-gradient-to-r from-amber-500 to-orange-500"
-                            : "bg-gradient-to-r from-blue-500 to-purple-500"
-                        }`}
-                      >
-                        {selectedItem.type === "book"
-                          ? "Historical Book"
-                          : "Documentary Film"}
+                      <span className={`px-4 py-2 rounded-full text-sm font-bold text-white shadow-lg ${
+                        selectedItem.type === "book" ? "bg-gradient-to-r from-amber-500 to-orange-500" : "bg-gradient-to-r from-blue-500 to-purple-500"
+                      }`}>
+                        {selectedItem.type === "book" ? "Historical Book" : "Documentary Film"}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Details */}
                 <div className="lg:w-3/5 p-8">
                   <div className="flex justify-between items-start mb-6">
                     <div>
-                      <h2 className="text-3xl font-bold text-stone-900 mb-2">
-                        {selectedItem.title}
-                      </h2>
+                      <h2 className="text-3xl font-bold text-stone-900 mb-2">{selectedItem.title}</h2>
                       <div className="flex items-center space-x-4 mb-4">
                         <div className="flex items-center text-stone-600">
                           {selectedItem.type === "book" ? (
                             <>
                               <User className="w-5 h-5 mr-2" />
-                              <span className="text-lg font-medium">
-                                {selectedItem.author || "Unknown"}
-                              </span>
+                              <span className="text-lg font-medium">{selectedItem.author || "Unknown"}</span>
                             </>
                           ) : (
                             <>
                               <Film className="w-5 h-5 mr-2" />
-                              <span className="text-lg font-medium">
-                                {selectedItem.narrator || "Unknown"}
-                              </span>
+                              <span className="text-lg font-medium">{selectedItem.narrator || "Unknown"}</span>
                             </>
                           )}
                         </div>
                         <div className="flex items-center text-stone-500">
                           <Eye className="w-5 h-5 mr-2" />
-                          <span>
-                            {selectedItem.views?.toLocaleString() || 0} views
-                          </span>
+                          <span>{selectedItem.views?.toLocaleString() || 0} views</span>
                         </div>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setSelectedItem(null)}
-                      className="text-stone-400 hover:text-stone-600 transition-colors text-2xl p-2 hover:bg-stone-100 rounded-full"
-                    >
+                    <button onClick={() => setSelectedItem(null)} className="text-stone-400 hover:text-stone-600 text-2xl p-2 hover:bg-stone-100 rounded-full">
                       ×
                     </button>
                   </div>
 
                   <div className="space-y-6">
-                    <p className="text-stone-700 leading-relaxed text-lg">
-                      {selectedItem.description}
-                    </p>
+                    <p className="text-stone-700 leading-relaxed text-lg">{selectedItem.description}</p>
 
                     <div className="grid grid-cols-2 gap-4 py-4 bg-stone-50 rounded-xl p-4">
                       <div>
-                        <span className="text-sm text-stone-500">
-                          Historical Period
-                        </span>
-                        <p className="font-bold text-lg text-stone-800">
-                          {selectedItem.period}
-                        </p>
+                        <span className="text-sm text-stone-500">Historical Period</span>
+                        <p className="font-bold text-lg text-stone-800">{selectedItem.period}</p>
                       </div>
                       <div>
                         <span className="text-sm text-stone-500">Region</span>
-                        <p className="font-bold text-lg text-stone-800">
-                          {selectedItem.region}
-                        </p>
+                        <p className="font-bold text-lg text-stone-800">{selectedItem.region}</p>
                       </div>
                       <div>
-                        <span className="text-sm text-stone-500">
-                          Published
-                        </span>
-                        <p className="font-medium">
-                          {new Date(
-                            selectedItem.published_date,
-                          ).toLocaleDateString("en-US", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })}
-                        </p>
+                        <span className="text-sm text-stone-500">Published</span>
+                        <p className="font-medium">{new Date(selectedItem.published_date).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</p>
                       </div>
                       <div>
-                        <span className="text-sm text-stone-500">
-                          {selectedItem.type === "book" ? "Pages" : "Duration"}
-                        </span>
-                        <p className="font-medium">
-                          {selectedItem.type === "book"
-                            ? `${selectedItem.pages || 0} pages`
-                            : selectedItem.duration || "N/A"}
-                        </p>
+                        <span className="text-sm text-stone-500">{selectedItem.type === "book" ? "Pages" : "Duration"}</span>
+                        <p className="font-medium">{selectedItem.type === "book" ? `${selectedItem.pages || 0} pages` : selectedItem.duration || "N/A"}</p>
                       </div>
                     </div>
+
                     <div className="flex space-x-4 pt-6">
-                      {selectedItem?.type === "documentary"
-                        ? selectedItem?.youtube_url && (
-                            <button
-                              onClick={() => {
-                                if (selectedItem?.youtube_url) {
-                                  window.open(
-                                    selectedItem.youtube_url,
-                                    "_blank",
-                                  );
-                                  setSelectedItem(null);
-                                }
-                              }}
-                              className="flex-1 bg-gradient-to-r from-red-600 to-red-700 text-white py-4 px-6 rounded-xl font-semibold hover:from-red-700 hover:to-red-800 transition-all flex items-center justify-center gap-3 shadow-lg"
-                            >
-                              <Play className="w-5 h-5" fill="white" />
-                              Watch on YouTube
-                              <ExternalLink className="w-4 h-4" />
-                            </button>
-                          )
-                        : selectedItem?.pdf_url && (
-                            <button
-                              onClick={() => {
-                                if (selectedItem) {
-                                  handleRead(selectedItem);
-                                }
-                              }}
-                              className="flex-1 bg-gradient-to-r from-amber-600 to-orange-600 text-white py-4 px-6 rounded-xl font-semibold hover:from-amber-700 hover:to-orange-700 transition-all flex items-center justify-center gap-3 shadow-lg"
-                            >
-                              <BookOpen className="w-5 h-5" />
-                              Read Now
-                            </button>
-                          )}
-                      {selectedItem?.type === "book" &&
-                        selectedItem?.pdf_url && (
+                      {selectedItem?.type === "documentary" ? (
+                        selectedItem?.youtube_url && (
                           <button
-                            onClick={() => {
-                              if (selectedItem) {
-                                handleDownload(selectedItem);
-                              }
-                            }}
-                            className="flex-1 border border-stone-300 text-stone-700 py-4 px-6 rounded-xl font-semibold hover:bg-stone-50 transition-all flex items-center justify-center gap-3"
+                            onClick={() => { window.open(selectedItem.youtube_url!, "_blank"); setSelectedItem(null); }}
+                            className="flex-1 bg-gradient-to-r from-red-600 to-red-700 text-white py-4 px-6 rounded-xl font-semibold hover:from-red-700 hover:to-red-800 transition-all flex items-center justify-center gap-3 shadow-lg"
                           >
-                            <Download className="w-5 h-5" />
-                            Download PDF
+                            <Play className="w-5 h-5" fill="white" />
+                            Watch on YouTube
+                            <ExternalLink className="w-4 h-4" />
                           </button>
-                        )}
+                        )
+                      ) : selectedItem?.pdf_url && (
+                        <button
+                          onClick={() => handleRead(selectedItem)}
+                          className="flex-1 bg-gradient-to-r from-amber-600 to-orange-600 text-white py-4 px-6 rounded-xl font-semibold hover:from-amber-700 hover:to-orange-700 transition-all flex items-center justify-center gap-3 shadow-lg"
+                        >
+                          <BookOpen className="w-5 h-5" />
+                          Read Now
+                        </button>
+                      )}
+                      {selectedItem?.type === "book" && selectedItem?.pdf_url && (
+                        <button
+                          onClick={() => handleDownload(selectedItem)}
+                          className="flex-1 border border-stone-300 text-stone-700 py-4 px-6 rounded-xl font-semibold hover:bg-stone-50 transition-all flex items-center justify-center gap-3"
+                        >
+                          <Download className="w-5 h-5" />
+                          Download PDF
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1037,7 +805,7 @@ export default function HistoryPage() {
           </div>
         )}
 
-        {/* PDF Viewer for Books with view tracking */}
+        {/* PDF Viewer */}
         {selectedPDF && (
           <SimplePDFViewer
             item={selectedPDF}
@@ -1046,14 +814,13 @@ export default function HistoryPage() {
           />
         )}
 
-        {/* NEW: Comments Modal */}
+        {/* Comments Modal */}
         {commentsModalOpen && selectedCommentItem && (
           <ContentCommentsModal
             isOpen={commentsModalOpen}
             onClose={() => {
               setCommentsModalOpen(false);
               setSelectedCommentItem(null);
-              // Refresh comment counts when modal closes
               fetchItems();
             }}
             contentId={selectedCommentItem.id}

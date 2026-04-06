@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import Image from "next/image";
+import ClientImage from "@/app/componets/ClientImage";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import {
   FaPlus,
   FaEdit,
@@ -29,7 +28,9 @@ import {
   FaDownload,
   FaSearch,
   FaLandmark,
-  FaPencilAlt,
+  FaHome,
+  FaComment,
+  FaThumbsUp,
 } from "react-icons/fa";
 
 interface ArtsItem {
@@ -63,10 +64,32 @@ interface ArtsItem {
   rating: number;
   era: string | null;
   pdf_url: string | null;
+  comment_count?: number;
+  likes_count?: number;
+}
+
+// Helper function for Vercel image paths
+function getValidImageUrl(imageUrl: string | null | undefined): string {
+  if (!imageUrl) {
+    return "https://placehold.co/800x600/e0e0e0/999?text=No+Image";
+  }
+
+  if (imageUrl.startsWith("http")) {
+    return imageUrl;
+  }
+
+  if (imageUrl.startsWith("/images/")) {
+    return imageUrl.replace("/images/", "/uploads/");
+  }
+
+  if (imageUrl.startsWith("/uploads/")) {
+    return imageUrl;
+  }
+
+  return imageUrl;
 }
 
 export default function ArtsAdminPage() {
-  const pathname = usePathname();
   const [items, setItems] = useState<ArtsItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -101,15 +124,15 @@ export default function ArtsAdminPage() {
   const coverInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
-  // Stats
   const [stats, setStats] = useState({
     totalBooks: 0,
     totalDocumentaries: 0,
     totalArtForms: 0,
     totalEras: 0,
+    totalLikes: 0,
+    totalComments: 0,
   });
 
-  // Filters and search
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"all" | "book" | "documentary">(
     "all",
@@ -127,17 +150,54 @@ export default function ArtsAdminPage() {
 
   const fetchItems = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("arts_items")
-      .select("*")
-      .order("created_at", { ascending: false });
+    try {
+      const [itemsResult, commentsResult, likesResult] = await Promise.all([
+        supabase
+          .from("arts_items")
+          .select("*")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("content_comments")
+          .select("content_id")
+          .eq("content_type", "arts"),
+        supabase
+          .from("content_likes")
+          .select("content_id")
+          .eq("content_type", "arts"),
+      ]);
 
-    if (error) {
+      if (itemsResult.error) throw itemsResult.error;
+
+      const commentMap = new Map();
+      if (commentsResult.data) {
+        commentsResult.data.forEach((item: any) => {
+          commentMap.set(
+            item.content_id,
+            (commentMap.get(item.content_id) || 0) + 1,
+          );
+        });
+      }
+
+      const likeMap = new Map();
+      if (likesResult.data) {
+        likesResult.data.forEach((item: any) => {
+          likeMap.set(item.content_id, (likeMap.get(item.content_id) || 0) + 1);
+        });
+      }
+
+      const itemsWithCounts = (itemsResult.data || []).map((item) => ({
+        ...item,
+        comment_count: commentMap.get(item.id) || 0,
+        likes_count: likeMap.get(item.id) || 0,
+      }));
+
+      setItems(itemsWithCounts);
+    } catch (error) {
       console.error("Error fetching arts items:", error);
-    } else {
-      setItems(data || []);
+      alert("Failed to load arts items");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const calculateStats = () => {
@@ -145,12 +205,19 @@ export default function ArtsAdminPage() {
     const docs = items.filter((i) => i.type === "documentary").length;
     const artForms = new Set(items.map((i) => i.art_form)).size;
     const eras = new Set(items.map((i) => i.era).filter(Boolean)).size;
+    const totalLikes = items.reduce((acc, i) => acc + (i.likes_count || 0), 0);
+    const totalComments = items.reduce(
+      (acc, i) => acc + (i.comment_count || 0),
+      0,
+    );
 
     setStats({
       totalBooks: books,
       totalDocumentaries: docs,
       totalArtForms: artForms,
       totalEras: eras,
+      totalLikes,
+      totalComments,
     });
   };
 
@@ -163,7 +230,6 @@ export default function ArtsAdminPage() {
       e.target.type === "checkbox"
         ? (e.target as HTMLInputElement).checked
         : e.target.value;
-
     setFormData({ ...formData, [e.target.name]: value });
   };
 
@@ -172,7 +238,6 @@ export default function ArtsAdminPage() {
     setFormData({ ...formData, [e.target.name]: value });
   };
 
-  // Cover image upload
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -196,7 +261,6 @@ export default function ArtsAdminPage() {
     setUploadingCover(true);
     const uploadFormData = new FormData();
     uploadFormData.append("file", file);
-    uploadFormData.append("bucket", "arts_covers");
 
     try {
       const response = await fetch("/api/upload", {
@@ -204,9 +268,20 @@ export default function ArtsAdminPage() {
         body: uploadFormData,
       });
 
-      if (!response.ok) throw new Error("Upload failed");
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        throw new Error(`Server returned: ${text.substring(0, 100)}`);
+      }
+
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Upload failed");
+      }
+
       setFormData((prev) => ({ ...prev, cover_image: data.url }));
+      alert("Image uploaded successfully!");
     } catch (error: any) {
       console.error("Upload error:", error);
       alert("Failed to upload image: " + error.message);
@@ -217,7 +292,6 @@ export default function ArtsAdminPage() {
     }
   };
 
-  // PDF upload
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -236,7 +310,6 @@ export default function ArtsAdminPage() {
     setUploadingPdf(true);
     const uploadFormData = new FormData();
     uploadFormData.append("file", file);
-    uploadFormData.append("bucket", "arts_pdfs");
 
     try {
       const response = await fetch("/api/upload", {
@@ -244,9 +317,20 @@ export default function ArtsAdminPage() {
         body: uploadFormData,
       });
 
-      if (!response.ok) throw new Error("Upload failed");
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        throw new Error(`Server returned: ${text.substring(0, 100)}`);
+      }
+
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Upload failed");
+      }
+
       setFormData((prev) => ({ ...prev, pdf_url: data.url }));
+      alert("PDF uploaded successfully!");
     } catch (error: any) {
       console.error("Upload error:", error);
       alert("Failed to upload PDF: " + error.message);
@@ -268,9 +352,11 @@ export default function ArtsAdminPage() {
           .update(formData)
           .eq("id", editingItem.id);
         if (error) throw error;
+        alert("Item updated successfully!");
       } else {
         const { error } = await supabase.from("arts_items").insert([formData]);
         if (error) throw error;
+        alert("Item created successfully!");
       }
 
       resetForm();
@@ -286,7 +372,7 @@ export default function ArtsAdminPage() {
   const handleEdit = (item: ArtsItem) => {
     setEditingItem(item);
     setFormData(item);
-    setPreviewCover(item.cover_image);
+    setPreviewCover(getValidImageUrl(item.cover_image));
     setSelectedPdfName(item.pdf_url ? "PDF uploaded" : null);
   };
 
@@ -299,6 +385,7 @@ export default function ArtsAdminPage() {
       console.error("Error deleting item:", error);
       alert("Error deleting item");
     } else {
+      alert("Item deleted successfully!");
       fetchItems();
     }
   };
@@ -348,12 +435,10 @@ export default function ArtsAdminPage() {
     if (pdfInputRef.current) pdfInputRef.current.value = "";
   };
 
-  // Filter items for display
   const filteredItems = items.filter((item) => {
     const matchesSearch =
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.author?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      false ||
       item.narrator?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       false;
 
@@ -392,39 +477,18 @@ export default function ArtsAdminPage() {
     "Digital Arts",
   ];
 
-  const navigationItems = [
-    { name: "Articles", href: "/admin", icon: "📄" },
-    { name: "Header Cards", href: "/admin/header-cards", icon: "🎯" },
-    { name: "Cards", href: "/admin/cards", icon: "📊" },
-    { name: "History", href: "/admin/history", icon: "📚" },
-    { name: "Science", href: "/admin/science", icon: "🔬" },
-    { name: "Books", href: "/admin/books", icon: "📖" },
-    { name: "Ubuzima", href: "/admin/ubuzima", icon: "❤️" },
-    { name: "Ubumenyamuntu", href: "/admin/ubumenyamuntu", icon: "🧠" },
-    { name: "Ubugeni", href: "/admin/ubugeni", icon: "🎨" },
-  ];
-
   const getArtFormIcon = (artForm: string) => {
-    switch (artForm) {
-      case "Visual Arts":
-        return <FaPalette className="w-3 h-3" />;
-      case "Music":
-        return <FaMusic className="w-3 h-3" />;
-      case "Literature":
-        return <FaBook className="w-3 h-3" />;
-      case "Film":
-        return <FaFilm className="w-3 h-3" />;
-      case "Performing Arts":
-        return <FaTheaterMasks className="w-3 h-3" />;
-      case "Architecture":
-        return <FaLandmark className="w-3 h-3" />;
-      case "Dance":
-        return <FaTheaterMasks className="w-3 h-3" />;
-      case "Digital Arts":
-        return <FaCamera className="w-3 h-3" />;
-      default:
-        return <FaBrush className="w-3 h-3" />;
-    }
+    const icons: Record<string, React.ReactNode> = {
+      "Visual Arts": <FaPalette className="w-3 h-3" />,
+      Music: <FaMusic className="w-3 h-3" />,
+      Literature: <FaBook className="w-3 h-3" />,
+      Film: <FaFilm className="w-3 h-3" />,
+      "Performing Arts": <FaTheaterMasks className="w-3 h-3" />,
+      Architecture: <FaLandmark className="w-3 h-3" />,
+      Dance: <FaTheaterMasks className="w-3 h-3" />,
+      "Digital Arts": <FaCamera className="w-3 h-3" />,
+    };
+    return icons[artForm] || <FaBrush className="w-3 h-3" />;
   };
 
   return (
@@ -434,11 +498,9 @@ export default function ArtsAdminPage() {
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <div className="flex-shrink-0 flex items-center">
-                <span className="text-xl font-bold text-gray-800">
-                  Admin Dashboard
-                </span>
-              </div>
+              <span className="text-xl font-bold text-gray-800">
+                Admin Dashboard
+              </span>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-500">Welcome, Admin</span>
@@ -451,93 +513,81 @@ export default function ArtsAdminPage() {
       </nav>
 
       <div className="flex pt-16">
-
-        {/* Main Content */}
         <main className="flex-1 ml-64 p-8">
           <div className="max-w-7xl mx-auto">
             {/* Breadcrumb */}
             <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-            <nav className="mt-10 text-sm text-gray-600 flex items-center gap-2">
-              <Link
-                href="/admin"
-                className="hover:text-rose-600 transition-colors"
-              >
-                Dashboard
-              </Link>
-              <span>/</span>
-              <span className="text-gray-900 font-medium">
-                Ubugeni
-              </span>
-            </nav>
+              <nav className="mt-10 text-sm text-gray-600 flex items-center gap-2">
+                <Link
+                  href="/admin"
+                  className="hover:text-purple-600 transition-colors"
+                >
+                  Dashboard
+                </Link>
+                <span>/</span>
+                <span className="text-gray-900 font-medium">Ubugeni</span>
+              </nav>
             </div>
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-              <div className="bg-gradient-to-br from-rose-500 to-pink-600 rounded-xl shadow-lg p-6 text-white">
+            {/* Stats Cards - 6 cards */}
+            <div className="grid grid-cols-4 md:grid-cols-6 gap-4 mb-8">
+              <div className="bg-rose-50 rounded-lg border border-rose-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-rose-100 text-sm font-medium">
-                      Art Publications
+                    <p className="text-xs text-rose-600 uppercase font-medium">
+                      Books
                     </p>
-                    <p className="text-3xl font-bold mt-1">
+                    <p className="text-2xl font-bold text-rose-700">
                       {stats.totalBooks}
                     </p>
                   </div>
-                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur">
-                    <FaBook className="w-6 h-6 text-white" />
-                  </div>
+                  <FaBook className="w-5 h-5 text-rose-400" />
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl shadow-lg p-6 text-white">
+              <div className="bg-orange-50 rounded-lg border border-orange-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-orange-100 text-sm font-medium">
-                      Art Documentaries
+                    <p className="text-xs text-orange-600 uppercase font-medium">
+                      Documentaries
                     </p>
-                    <p className="text-3xl font-bold mt-1">
+                    <p className="text-2xl font-bold text-orange-700">
                       {stats.totalDocumentaries}
                     </p>
                   </div>
-                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur">
-                    <FaFilm className="w-6 h-6 text-white" />
+                  <FaFilm className="w-5 h-5 text-orange-800" />
+                </div>
+              </div>
+              <div className="bg-amber-50 rounded-lg border border-amber-200 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-amber-600 uppercase font-medium">
+                      Likes
+                    </p>
+                    <p className="text-2xl font-bold text-amber-700">
+                      {stats.totalLikes.toLocaleString()}
+                    </p>
                   </div>
+                  <FaThumbsUp className="w-5 h-5 text-amber-400" />
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-lg p-6 text-white">
+              <div className="bg-indigo-50 rounded-lg border border-indigo-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-purple-100 text-sm font-medium">
-                      Art Forms
+                    <p className="text-xs text-indigo-600 uppercase font-medium">
+                      Comments
                     </p>
-                    <p className="text-3xl font-bold mt-1">
-                      {stats.totalArtForms}
+                    <p className="text-2xl font-bold text-indigo-700">
+                      {stats.totalComments.toLocaleString()}
                     </p>
                   </div>
-                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur">
-                    <FaPalette className="w-6 h-6 text-white" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg p-6 text-white">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-green-100 text-sm font-medium">
-                      Art Movements
-                    </p>
-                    <p className="text-3xl font-bold mt-1">{stats.totalEras}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur">
-                    <FaLandmark className="w-6 h-6 text-white" />
-                  </div>
+                  <FaComment className="w-5 h-5 text-indigo-400" />
                 </div>
               </div>
             </div>
 
             {/* Search and Filters */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 mb-8">
+            <div className="bg-white rounded-lg border border-gray-200 p-4 mb-8">
               <div className="flex flex-col md:flex-row gap-4">
                 <div className="flex-1 relative">
                   <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -546,7 +596,7 @@ export default function ArtsAdminPage() {
                     placeholder="Search by title, author, or narrator..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-rose-500"
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500 focus:border-rose-500"
                   />
                 </div>
 
@@ -554,7 +604,7 @@ export default function ArtsAdminPage() {
                   <select
                     value={filterType}
                     onChange={(e) => setFilterType(e.target.value as any)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-rose-500"
                   >
                     <option value="all">All Types</option>
                     <option value="book">Books Only</option>
@@ -564,7 +614,7 @@ export default function ArtsAdminPage() {
                   <select
                     value={filterArtForm}
                     onChange={(e) => setFilterArtForm(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-rose-500"
                   >
                     <option value="all">All Art Forms</option>
                     {artForms.map((a) => (
@@ -588,7 +638,7 @@ export default function ArtsAdminPage() {
                         val === "all" ? null : val === "featured",
                       );
                     }}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-rose-500"
                   >
                     <option value="all">All Items</option>
                     <option value="featured">Featured Only</option>
@@ -599,9 +649,9 @@ export default function ArtsAdminPage() {
             </div>
 
             {/* Form Card */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden mb-8">
-              <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
-                <h2 className="font-semibold text-gray-700 flex items-center gap-2">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-8">
+              <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+                <h2 className="font-medium text-gray-700 flex items-center gap-2">
                   {editingItem ? (
                     <>
                       <FaEdit className="text-blue-500" /> Edit Arts Item
@@ -628,7 +678,6 @@ export default function ArtsAdminPage() {
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Title */}
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Title <span className="text-red-500">*</span>
@@ -638,11 +687,10 @@ export default function ArtsAdminPage() {
                       value={formData.title}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500"
                     />
                   </div>
 
-                  {/* Type Selection */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Type
@@ -651,14 +699,13 @@ export default function ArtsAdminPage() {
                       name="type"
                       value={formData.type}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500"
                     >
                       <option value="book">Book</option>
                       <option value="documentary">Documentary</option>
                     </select>
                   </div>
 
-                  {/* Author / Narrator */}
                   {formData.type === "book" ? (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -669,7 +716,7 @@ export default function ArtsAdminPage() {
                         value={formData.author || ""}
                         onChange={handleChange}
                         required={formData.type === "book"}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500"
                       />
                     </div>
                   ) : (
@@ -682,12 +729,11 @@ export default function ArtsAdminPage() {
                         value={formData.narrator || ""}
                         onChange={handleChange}
                         required={formData.type === "documentary"}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500"
                       />
                     </div>
                   )}
 
-                  {/* Published Date */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Published Date <span className="text-red-500">*</span>
@@ -698,11 +744,10 @@ export default function ArtsAdminPage() {
                       value={formData.published_date}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500"
                     />
                   </div>
 
-                  {/* Category */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Category <span className="text-red-500">*</span>
@@ -712,7 +757,7 @@ export default function ArtsAdminPage() {
                       value={formData.category}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500"
                     >
                       {categories.map((c) => (
                         <option key={c} value={c}>
@@ -722,7 +767,6 @@ export default function ArtsAdminPage() {
                     </select>
                   </div>
 
-                  {/* Art Form */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Art Form <span className="text-red-500">*</span>
@@ -732,7 +776,7 @@ export default function ArtsAdminPage() {
                       value={formData.art_form}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500"
                     >
                       {artForms.map((a) => (
                         <option key={a} value={a}>
@@ -742,7 +786,6 @@ export default function ArtsAdminPage() {
                     </select>
                   </div>
 
-                  {/* Language */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Language
@@ -751,11 +794,10 @@ export default function ArtsAdminPage() {
                       name="language"
                       value={formData.language}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500"
                     />
                   </div>
 
-                  {/* Era */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Era / Movement
@@ -765,11 +807,10 @@ export default function ArtsAdminPage() {
                       value={formData.era || ""}
                       onChange={handleChange}
                       placeholder="e.g., Renaissance, Modern, Contemporary"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500"
                     />
                   </div>
 
-                  {/* Book-specific fields */}
                   {formData.type === "book" && (
                     <>
                       <div>
@@ -781,7 +822,7 @@ export default function ArtsAdminPage() {
                           name="pages"
                           value={formData.pages || ""}
                           onChange={handleNumberChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500"
                         />
                       </div>
 
@@ -793,7 +834,7 @@ export default function ArtsAdminPage() {
                           name="isbn"
                           value={formData.isbn || ""}
                           onChange={handleChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500"
                         />
                       </div>
 
@@ -805,25 +846,24 @@ export default function ArtsAdminPage() {
                           name="publisher"
                           value={formData.publisher || ""}
                           onChange={handleChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500"
                         />
                       </div>
                     </>
                   )}
 
-                  {/* Documentary-specific fields */}
                   {formData.type === "documentary" && (
                     <>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Duration (e.g., 2h 30m)
+                          Duration
                         </label>
                         <input
                           name="duration"
                           value={formData.duration || ""}
                           onChange={handleChange}
                           placeholder="2h 30m"
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500"
                         />
                       </div>
 
@@ -836,43 +876,12 @@ export default function ArtsAdminPage() {
                           value={formData.youtube_url || ""}
                           onChange={handleChange}
                           placeholder="https://youtube.com/watch?v=..."
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500"
                         />
                       </div>
                     </>
                   )}
 
-                  {/* Rating */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Rating (0-5)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="5"
-                      name="rating"
-                      value={formData.rating}
-                      onChange={handleNumberChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
-                    />
-                  </div>
-
-                  {/* Views (read-only) */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Views
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.views}
-                      disabled
-                      className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-500"
-                    />
-                  </div>
-
-                  {/* Checkboxes */}
                   <div className="flex items-center gap-6 flex-wrap">
                     <label className="flex items-center gap-2">
                       <input
@@ -902,7 +911,6 @@ export default function ArtsAdminPage() {
                   </div>
                 </div>
 
-                {/* Description */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Description <span className="text-red-500">*</span>
@@ -913,7 +921,7 @@ export default function ArtsAdminPage() {
                     onChange={handleChange}
                     required
                     rows={4}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-rose-500"
                   />
                 </div>
 
@@ -934,7 +942,7 @@ export default function ArtsAdminPage() {
                       type="button"
                       onClick={() => coverInputRef.current?.click()}
                       disabled={uploadingCover}
-                      className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:ring-2 focus:ring-rose-500 disabled:bg-gray-100 flex items-center gap-2"
+                      className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-100 flex items-center gap-2"
                     >
                       {uploadingCover ? (
                         <>
@@ -953,13 +961,14 @@ export default function ArtsAdminPage() {
                     )}
                   </div>
 
-                  {/* Cover Preview */}
                   {(previewCover || formData.cover_image) && (
                     <div className="mt-4">
                       <p className="text-xs text-gray-500 mb-2">Preview:</p>
-                      <div className="relative w-40 h-40 rounded-lg border border-gray-300 overflow-hidden bg-gray-100">
-                        <Image
-                          src={previewCover || formData.cover_image}
+                      <div className="relative w-40 h-40 rounded-md border border-gray-300 overflow-hidden bg-gray-100">
+                        <ClientImage
+                          src={getValidImageUrl(
+                            previewCover || formData.cover_image,
+                          )}
                           alt="Preview"
                           fill
                           className="object-cover"
@@ -969,7 +978,7 @@ export default function ArtsAdminPage() {
                   )}
                 </div>
 
-                {/* PDF Upload (for books) */}
+                {/* PDF Upload */}
                 {formData.type === "book" && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -987,7 +996,7 @@ export default function ArtsAdminPage() {
                         type="button"
                         onClick={() => pdfInputRef.current?.click()}
                         disabled={uploadingPdf}
-                        className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:ring-2 focus:ring-rose-500 disabled:bg-gray-100 flex items-center gap-2"
+                        className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-100 flex items-center gap-2"
                       >
                         {uploadingPdf ? (
                           <>
@@ -1020,36 +1029,30 @@ export default function ArtsAdminPage() {
                   </div>
                 )}
 
-                {/* Form Actions - Enhanced Visibility */}
-                <div className="flex flex-col sm:flex-row justify-end gap-4 pt-6 border-t-2 border-gray-200 mt-6">
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                   <button
                     type="button"
                     onClick={resetForm}
-                    className="px-6 py-3 bg-white border-2 border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-100 hover:border-gray-400 transition-all duration-200 flex items-center justify-center gap-2 shadow-sm hover:shadow"
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                   >
-                    <FaTimes className="w-4 h-4" />
-                    Clear Form
+                    <FaTimes /> Clear
                   </button>
-
                   <button
                     type="submit"
                     disabled={loading || uploadingCover || uploadingPdf}
-                    className="px-8 py-3 bg-gradient-to-r from-rose-500 to-pink-600 text-white rounded-xl text-sm font-semibold hover:from-rose-600 hover:to-pink-700 disabled:from-rose-300 disabled:to-pink-300 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-lg transform hover:scale-[1.02] active:scale-[0.98] min-w-[160px]"
+                    className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 flex items-center gap-2"
                   >
                     {loading ? (
                       <>
-                        <FaSpinner className="animate-spin w-4 h-4" />
-                        <span>Saving...</span>
+                        <FaSpinner className="animate-spin" /> Saving...
                       </>
                     ) : editingItem ? (
                       <>
-                        <FaEdit className="w-4 h-4" />
-                        <span>Update Item</span>
+                        <FaEdit /> Update Item
                       </>
                     ) : (
                       <>
-                        <FaPlus className="w-4 h-4" />
-                        <span>Add New Item</span>
+                        <FaPlus /> Add Item
                       </>
                     )}
                   </button>
@@ -1058,32 +1061,27 @@ export default function ArtsAdminPage() {
             </div>
 
             {/* Arts Items Table */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-rose-100 rounded-lg">
-                      <FaPalette className="w-4 h-4 text-rose-600" />
-                    </div>
-                    <div>
-                      <h2 className="font-semibold text-gray-800">
-                        Ubugeni Collection
-                      </h2>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        Manage all arts books and documentaries
-                      </p>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <FaPalette className="w-5 h-5 text-gray-500" />
+                    <h2 className="font-medium text-gray-800">
+                      Ubugeni Collection
+                    </h2>
+                    <span className="text-xs text-gray-500">
+                      Manage arts books and documentaries
+                    </span>
                   </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="px-3 py-1.5 bg-rose-50 rounded-lg border border-rose-100">
+                  <div className="flex items-center gap-2">
+                    <div className="px-3 py-1 bg-rose-50 rounded-md border border-rose-100">
                       <span className="text-xs font-medium text-rose-700">
-                        📚 {stats.totalBooks} Books
+                        {stats.totalBooks} Books
                       </span>
                     </div>
-                    <div className="px-3 py-1.5 bg-orange-50 rounded-lg border border-orange-100">
+                    <div className="px-3 py-1 bg-orange-50 rounded-md border border-orange-100">
                       <span className="text-xs font-medium text-orange-700">
-                        🎬 {stats.totalDocumentaries} Documentaries
+                        {stats.totalDocumentaries} Documentaries
                       </span>
                     </div>
                   </div>
@@ -1091,30 +1089,25 @@ export default function ArtsAdminPage() {
               </div>
 
               {loading ? (
-                <div className="p-16 text-center">
-                  <div className="relative">
-                    <div className="w-16 h-16 border-4 border-gray-200 rounded-full"></div>
-                    <div className="absolute top-0 left-0 w-16 h-16 border-4 border-rose-500 rounded-full border-t-transparent animate-spin"></div>
+                <div className="p-12 text-center">
+                  <div className="inline-flex flex-col items-center gap-3">
+                    <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
+                    <p className="text-gray-500 text-sm">Loading items...</p>
                   </div>
-                  <p className="text-gray-500 font-medium mt-4">
-                    Loading arts items...
-                  </p>
                 </div>
               ) : filteredItems.length === 0 ? (
-                <div className="p-16 text-center">
-                  <div className="inline-flex flex-col items-center gap-4 max-w-sm">
-                    <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
-                      <FaPalette className="w-10 h-10 text-gray-400" />
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-800">
+                <div className="p-12 text-center">
+                  <div className="inline-flex flex-col items-center gap-3">
+                    <FaPalette className="w-12 h-12 text-gray-300" />
+                    <h3 className="text-base font-medium text-gray-700">
                       No items found
                     </h3>
-                    <p className="text-gray-500 text-sm">
+                    <p className="text-gray-500 text-sm max-w-sm">
                       {searchQuery ||
                       filterArtForm !== "all" ||
                       filterType !== "all"
-                        ? "Try adjusting your filters to see more results"
-                        : "Get started by adding your first arts item"}
+                        ? "Try adjusting your filters"
+                        : "Add your first arts item using the form above"}
                     </p>
                     {(searchQuery ||
                       filterArtForm !== "all" ||
@@ -1126,9 +1119,9 @@ export default function ArtsAdminPage() {
                           setFilterType("all");
                           setFilterFeatured(null);
                         }}
-                        className="mt-2 px-4 py-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors text-sm font-medium"
+                        className="mt-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-md text-sm hover:bg-gray-200"
                       >
-                        Clear all filters
+                        Clear filters
                       </button>
                     )}
                   </div>
@@ -1138,34 +1131,32 @@ export default function ArtsAdminPage() {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-4 text-left">
-                          <input
-                            type="checkbox"
-                            className="rounded border-gray-300 text-rose-600 focus:ring-rose-500"
-                          />
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Type
                         </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Title & Author
                         </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Art Form
                         </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Category
                         </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Views
                         </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                          Rating
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Likes
                         </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Comments
+                        </th>
+
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Featured
                         </th>
-                        <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                           Actions
                         </th>
                       </tr>
@@ -1174,57 +1165,41 @@ export default function ArtsAdminPage() {
                       {filteredItems.map((item) => (
                         <tr
                           key={item.id}
-                          className="hover:bg-rose-50/30 transition-colors group"
+                          className="hover:bg-gray-50 transition-colors"
                         >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <input
-                              type="checkbox"
-                              className="rounded border-gray-300 text-rose-600 focus:ring-rose-500"
-                            />
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-4 py-3 whitespace-nowrap">
                             <span
-                              className={`px-3 py-1.5 text-xs font-semibold rounded-full inline-flex items-center gap-1.5 ${
+                              className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md ${
                                 item.type === "book"
-                                  ? "bg-rose-100 text-rose-800 border border-rose-200"
-                                  : "bg-orange-100 text-orange-800 border border-orange-200"
+                                  ? "bg-rose-50 text-rose-700"
+                                  : "bg-orange-50 text-orange-700"
                               }`}
                             >
-                              {item.type === "book" ? (
-                                <>
-                                  <FaBook className="w-3 h-3" />
-                                  Book
-                                </>
-                              ) : (
-                                <>
-                                  <FaFilm className="w-3 h-3" />
-                                  Documentary
-                                </>
-                              )}
+                              {item.type === "book" ? "Book" : "Documentary"}
                             </span>
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-4">
-                              <div className="relative w-12 h-12 rounded-lg overflow-hidden shadow-sm ring-2 ring-gray-100 group-hover:ring-rose-200 transition-all">
-                                <Image
-                                  src={item.cover_image}
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="relative w-10 h-10 rounded-md overflow-hidden bg-gray-100 flex-shrink-0">
+                                <ClientImage
+                                  src={getValidImageUrl(item.cover_image)}
                                   alt={item.title}
                                   fill
                                   className="object-cover"
                                 />
                                 {item.is_new && (
-                                  <div className="absolute top-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                                  <div className="absolute top-0 right-0 w-2 h-2 bg-green-500 rounded-full"></div>
                                 )}
                               </div>
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <h3 className="text-sm font-semibold text-gray-900">
+                                  <h3 className="text-sm font-medium text-gray-900">
                                     {item.title.length > 40
                                       ? `${item.title.substring(0, 40)}...`
                                       : item.title}
                                   </h3>
                                   {item.is_featured && (
-                                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[10px] font-bold">
+                                    <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
                                       Masterpiece
                                     </span>
                                   )}
@@ -1240,71 +1215,65 @@ export default function ArtsAdminPage() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="px-2 py-1 bg-rose-50 text-rose-700 rounded-md text-xs font-medium border border-rose-100 inline-flex items-center gap-1">
-                              {getArtFormIcon(item.art_form)}
-                              {item.art_form}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-rose-50 text-rose-700 rounded-md text-xs">
+                              {getArtFormIcon(item.art_form)} {item.art_form}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="px-2 py-1 bg-purple-50 text-purple-700 rounded-md text-xs font-medium border border-purple-100">
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="px-2 py-1 bg-purple-50 text-purple-700 rounded-md text-xs">
                               {item.category.split(" ")[0]}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
                             {item.views.toLocaleString()}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-1">
-                              <span className="text-sm font-medium text-gray-900 mr-1">
-                                {item.rating?.toFixed(1) || "0.0"}
-                              </span>
-                              <FaStar className="w-4 h-4 text-amber-400" />
-                            </div>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                            {item.likes_count?.toLocaleString() || 0}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                            {item.comment_count?.toLocaleString() || 0}
+                          </td>
+
+                          <td className="px-4 py-3 whitespace-nowrap">
                             <button
                               onClick={() =>
                                 toggleFeatured(item.id!, item.is_featured)
                               }
-                              className={`p-2 rounded-lg transition-all ${
-                                item.is_featured
-                                  ? "text-amber-500 hover:bg-amber-100"
-                                  : "text-gray-300 hover:text-amber-500 hover:bg-amber-50"
-                              }`}
+                              className={`p-1.5 rounded-md transition-colors ${item.is_featured ? "text-amber-500 hover:bg-amber-50" : "text-gray-300 hover:text-amber-500 hover:bg-amber-50"}`}
                               title={
                                 item.is_featured
                                   ? "Remove from featured"
                                   : "Add to featured"
                               }
                             >
-                              <FaStar size={18} />
+                              <FaStar size={14} />
                             </button>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right">
-                            <div className="flex items-center justify-end gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                          <td className="px-4 py-3 whitespace-nowrap text-right">
+                            <div className="flex items-center justify-end gap-1">
                               <button
                                 onClick={() =>
                                   window.open(`/ubugeni/${item.id}`, "_blank")
                                 }
-                                className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                                title="Preview"
+                                className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+                                title="View"
                               >
-                                <FaEye size={16} />
+                                <FaEye size={14} />
                               </button>
                               <button
                                 onClick={() => handleEdit(item)}
-                                className="p-2 text-gray-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                                className="p-1.5 text-gray-500 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
                                 title="Edit"
                               >
-                                <FaEdit size={16} />
+                                <FaEdit size={14} />
                               </button>
                               <button
                                 onClick={() => handleDelete(item.id!)}
-                                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                                 title="Delete"
                               >
-                                <FaTrash size={16} />
+                                <FaTrash size={14} />
                               </button>
                             </div>
                           </td>
@@ -1312,6 +1281,19 @@ export default function ArtsAdminPage() {
                       ))}
                     </tbody>
                   </table>
+
+                  <div className="px-6 py-3 bg-gray-50 border-t border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-gray-500">
+                        Showing{" "}
+                        <span className="font-medium">
+                          {filteredItems.length}
+                        </span>{" "}
+                        of <span className="font-medium">{items.length}</span>{" "}
+                        items
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

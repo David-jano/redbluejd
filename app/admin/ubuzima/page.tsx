@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import Image from "next/image";
+import ClientImage from "@/app/componets/ClientImage";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import {
   FaPlus,
   FaEdit,
@@ -24,6 +23,9 @@ import {
   FaFilePdf,
   FaDownload,
   FaSearch,
+  FaHome,
+  FaComment,
+  FaThumbsUp,
 } from "react-icons/fa";
 
 interface HealthItem {
@@ -36,23 +38,51 @@ interface HealthItem {
   description: string;
   cover_image: string;
   category: string;
-  focus_area: 'Nutrition' | 'Fitness' | 'Mental Health' | 'Medical' | 'Wellness' | 'Alternative Medicine';
+  focus_area:
+    | "Nutrition"
+    | "Fitness"
+    | "Mental Health"
+    | "Medical"
+    | "Wellness"
+    | "Alternative Medicine";
   duration: string | null;
   youtube_url: string | null;
   pages: number | null;
   language: string;
   isbn: string | null;
   publisher: string | null;
-  type: 'book' | 'documentary';
+  type: "book" | "documentary";
   is_featured: boolean;
   is_new: boolean;
   rating: number;
   certified: boolean;
   pdf_url: string | null;
+  comment_count?: number;
+  like_count?: number;
+}
+
+// Helper function for Vercel image paths
+function getValidImageUrl(imageUrl: string | null | undefined): string {
+  if (!imageUrl) {
+    return "https://placehold.co/800x600/e0e0e0/999?text=No+Image";
+  }
+
+  if (imageUrl.startsWith("http")) {
+    return imageUrl;
+  }
+
+  if (imageUrl.startsWith("/images/")) {
+    return imageUrl.replace("/images/", "/uploads/");
+  }
+
+  if (imageUrl.startsWith("/uploads/")) {
+    return imageUrl;
+  }
+
+  return imageUrl;
 }
 
 export default function HealthAdminPage() {
-  const pathname = usePathname();
   const [items, setItems] = useState<HealthItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -62,7 +92,7 @@ export default function HealthAdminPage() {
     title: "",
     author: "",
     narrator: "",
-    published_date: new Date().toISOString().split('T')[0],
+    published_date: new Date().toISOString().split("T")[0],
     views: 0,
     description: "",
     cover_image: "",
@@ -86,18 +116,20 @@ export default function HealthAdminPage() {
   const [selectedPdfName, setSelectedPdfName] = useState<string | null>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
-  
-  // Stats
+
   const [stats, setStats] = useState({
     totalBooks: 0,
     totalDocumentaries: 0,
     totalCategories: 0,
     totalExperts: 0,
+    totalLikes: 0,
+    totalComments: 0,
   });
 
-  // Filters and search
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterType, setFilterType] = useState<"all" | "book" | "documentary">("all");
+  const [filterType, setFilterType] = useState<"all" | "book" | "documentary">(
+    "all",
+  );
   const [filterFeatured, setFilterFeatured] = useState<boolean | null>(null);
   const [filterFocus, setFilterFocus] = useState<string>("all");
 
@@ -109,51 +141,100 @@ export default function HealthAdminPage() {
     calculateStats();
   }, [items]);
 
+  // OPTIMIZED: Parallel fetching for items with counts
   const fetchItems = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("health_items")
-      .select("*")
-      .order("created_at", { ascending: false });
+    try {
+      const [itemsResult, commentsResult, likesResult] = await Promise.all([
+        supabase
+          .from("health_items")
+          .select("*")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("content_comments")
+          .select("content_id")
+          .eq("content_type", "health"),
+        supabase
+          .from("content_likes")
+          .select("content_id")
+          .eq("content_type", "health"),
+      ]);
 
-    if (error) {
+      if (itemsResult.error) throw itemsResult.error;
+
+      const commentMap = new Map();
+      if (commentsResult.data) {
+        commentsResult.data.forEach((item: any) => {
+          commentMap.set(
+            item.content_id,
+            (commentMap.get(item.content_id) || 0) + 1,
+          );
+        });
+      }
+
+      const likeMap = new Map();
+      if (likesResult.data) {
+        likesResult.data.forEach((item: any) => {
+          likeMap.set(item.content_id, (likeMap.get(item.content_id) || 0) + 1);
+        });
+      }
+
+      const itemsWithCounts = (itemsResult.data || []).map((item) => ({
+        ...item,
+        comment_count: commentMap.get(item.id) || 0,
+        like_count: likeMap.get(item.id) || 0,
+      }));
+
+      setItems(itemsWithCounts);
+    } catch (error) {
       console.error("Error fetching health items:", error);
-    } else {
-      setItems(data || []);
+      alert("Failed to load health items");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const calculateStats = () => {
-    const books = items.filter(i => i.type === "book").length;
-    const docs = items.filter(i => i.type === "documentary").length;
-    const categories = new Set(items.map(i => i.category)).size;
-    const experts = new Set(items.map(i => i.author || i.narrator).filter(Boolean)).size;
+    const books = items.filter((i) => i.type === "book").length;
+    const docs = items.filter((i) => i.type === "documentary").length;
+    const categories = new Set(items.map((i) => i.category)).size;
+    const experts = new Set(
+      items.map((i) => i.author || i.narrator).filter(Boolean),
+    ).size;
+    const totalLikes = items.reduce((acc, i) => acc + (i.like_count || 0), 0);
+    const totalComments = items.reduce(
+      (acc, i) => acc + (i.comment_count || 0),
+      0,
+    );
 
     setStats({
       totalBooks: books,
       totalDocumentaries: docs,
       totalCategories: categories,
       totalExperts: experts,
+      totalLikes,
+      totalComments,
     });
   };
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >,
   ) => {
-    const value = e.target.type === 'checkbox' 
-      ? (e.target as HTMLInputElement).checked 
-      : e.target.value;
-    
+    const value =
+      e.target.type === "checkbox"
+        ? (e.target as HTMLInputElement).checked
+        : e.target.value;
+
     setFormData({ ...formData, [e.target.name]: value });
   };
 
   const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value === '' ? 0 : Number(e.target.value);
+    const value = e.target.value === "" ? 0 : Number(e.target.value);
     setFormData({ ...formData, [e.target.name]: value });
   };
 
-  // Cover image upload
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -177,7 +258,6 @@ export default function HealthAdminPage() {
     setUploadingCover(true);
     const uploadFormData = new FormData();
     uploadFormData.append("file", file);
-    uploadFormData.append("bucket", "health_covers");
 
     try {
       const response = await fetch("/api/upload", {
@@ -185,9 +265,20 @@ export default function HealthAdminPage() {
         body: uploadFormData,
       });
 
-      if (!response.ok) throw new Error("Upload failed");
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        throw new Error(`Server returned: ${text.substring(0, 100)}`);
+      }
+
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Upload failed");
+      }
+
       setFormData((prev) => ({ ...prev, cover_image: data.url }));
+      alert("Image uploaded successfully!");
     } catch (error: any) {
       console.error("Upload error:", error);
       alert("Failed to upload image: " + error.message);
@@ -198,7 +289,6 @@ export default function HealthAdminPage() {
     }
   };
 
-  // PDF upload
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -217,7 +307,6 @@ export default function HealthAdminPage() {
     setUploadingPdf(true);
     const uploadFormData = new FormData();
     uploadFormData.append("file", file);
-    uploadFormData.append("bucket", "health_pdfs");
 
     try {
       const response = await fetch("/api/upload", {
@@ -225,9 +314,20 @@ export default function HealthAdminPage() {
         body: uploadFormData,
       });
 
-      if (!response.ok) throw new Error("Upload failed");
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        throw new Error(`Server returned: ${text.substring(0, 100)}`);
+      }
+
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Upload failed");
+      }
+
       setFormData((prev) => ({ ...prev, pdf_url: data.url }));
+      alert("PDF uploaded successfully!");
     } catch (error: any) {
       console.error("Upload error:", error);
       alert("Failed to upload PDF: " + error.message);
@@ -249,11 +349,13 @@ export default function HealthAdminPage() {
           .update(formData)
           .eq("id", editingItem.id);
         if (error) throw error;
+        alert("Item updated successfully!");
       } else {
         const { error } = await supabase
           .from("health_items")
           .insert([formData]);
         if (error) throw error;
+        alert("Item created successfully!");
       }
 
       resetForm();
@@ -269,22 +371,20 @@ export default function HealthAdminPage() {
   const handleEdit = (item: HealthItem) => {
     setEditingItem(item);
     setFormData(item);
-    setPreviewCover(item.cover_image);
+    setPreviewCover(getValidImageUrl(item.cover_image));
     setSelectedPdfName(item.pdf_url ? "PDF uploaded" : null);
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm("Are you sure you want to delete this item?")) return;
 
-    const { error } = await supabase
-      .from("health_items")
-      .delete()
-      .eq("id", id);
+    const { error } = await supabase.from("health_items").delete().eq("id", id);
 
     if (error) {
       console.error("Error deleting item:", error);
       alert("Error deleting item");
     } else {
+      alert("Item deleted successfully!");
       fetchItems();
     }
   };
@@ -309,7 +409,7 @@ export default function HealthAdminPage() {
       title: "",
       author: "",
       narrator: "",
-      published_date: new Date().toISOString().split('T')[0],
+      published_date: new Date().toISOString().split("T")[0],
       views: 0,
       description: "",
       cover_image: "",
@@ -334,36 +434,45 @@ export default function HealthAdminPage() {
     if (pdfInputRef.current) pdfInputRef.current.value = "";
   };
 
-  // Filter items for display
-  const filteredItems = items.filter(item => {
-    const matchesSearch = 
+  const filteredItems = items.filter((item) => {
+    const matchesSearch =
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.author?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
-      (item.narrator?.toLowerCase().includes(searchQuery.toLowerCase()) || false);
-    
+      item.author?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      false ||
+      item.narrator?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      false;
+
     const matchesType = filterType === "all" || item.type === filterType;
-    const matchesFeatured = filterFeatured === null || item.is_featured === filterFeatured;
-    const matchesFocus = filterFocus === "all" || item.focus_area === filterFocus;
-    
+    const matchesFeatured =
+      filterFeatured === null || item.is_featured === filterFeatured;
+    const matchesFocus =
+      filterFocus === "all" || item.focus_area === filterFocus;
+
     return matchesSearch && matchesType && matchesFeatured && matchesFocus;
   });
 
   const categories: string[] = [
-    'Nutrition', 'Exercise Science', 'Mental Health', 'Preventive Medicine',
-    'Medical Research', 'Yoga & Meditation', 'Holistic Health', 'Aging & Longevity',
-    'Children\'s Health', 'Women\'s Health', 'Men\'s Health', 'First Aid & Safety'
+    "Nutrition",
+    "Exercise Science",
+    "Mental Health",
+    "Preventive Medicine",
+    "Medical Research",
+    "Yoga & Meditation",
+    "Holistic Health",
+    "Aging & Longevity",
+    "Children's Health",
+    "Women's Health",
+    "Men's Health",
+    "First Aid & Safety",
   ];
 
-  const focusAreas = ['Nutrition', 'Fitness', 'Mental Health', 'Medical', 'Wellness', 'Alternative Medicine'];
-
-  const navigationItems = [
-    { name: "Articles", href: "/admin", icon: "📄" },
-    { name: "Header Cards", href: "/admin/header-cards", icon: "🎯" },
-    { name: "Cards", href: "/admin/cards", icon: "📊" },
-    { name: "History", href: "/admin/history", icon: "📚" },
-    { name: "Science", href: "/admin/science", icon: "🔬" },
-    { name: "Books", href: "/admin/books", icon: "📖" },
-    { name: "Ubuzima", href: "/admin/ubuzima", icon: "❤️" },
+  const focusAreas = [
+    "Nutrition",
+    "Fitness",
+    "Mental Health",
+    "Medical",
+    "Wellness",
+    "Alternative Medicine",
   ];
 
   return (
@@ -373,11 +482,9 @@ export default function HealthAdminPage() {
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <div className="flex-shrink-0 flex items-center">
-                <span className="text-xl font-bold text-gray-800">
-                  Admin Dashboard
-                </span>
-              </div>
+              <span className="text-xl font-bold text-gray-800">
+                Admin Dashboard
+              </span>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-500">Welcome, Admin</span>
@@ -390,82 +497,97 @@ export default function HealthAdminPage() {
       </nav>
 
       <div className="flex pt-16">
-
-        {/* Main Content */}
         <main className="flex-1 ml-64 p-8">
           <div className="max-w-7xl mx-auto">
             {/* Breadcrumb */}
-             <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-            <nav className="mt-10 text-sm text-gray-600 flex items-center gap-2">
-              <Link href="/admin" className="hover:text-green-600 transition-colors">
-                Dashboard
-              </Link>
-              <span>/</span>
-              <span className="text-gray-900 font-medium">Ubuzima</span>
-            </nav>
+            <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+              <nav className="mt-10 text-sm text-gray-600 flex items-center gap-2">
+                <Link
+                  href="/admin"
+                  className="hover:text-orange-600 transition-colors"
+                >
+                  Dashboard
+                </Link>
+                <span>/</span>
+                <span className="text-gray-900 font-medium">Ubuzima</span>
+              </nav>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-              <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg p-6 text-white">
+            {/* Stats Cards - Colored but no gradients */}
+            <div className="grid grid-cols-4 md:grid-cols-6 gap-4 mb-8">
+              <div className="bg-green-50 rounded-lg border border-green-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-green-100 text-sm font-medium">
-                      Ibitabo by'Ubuzima
+                    <p className="text-xs text-green-600 uppercase font-medium">
+                      Books
                     </p>
-                    <p className="text-3xl font-bold mt-1">{stats.totalBooks}</p>
+                    <p className="text-2xl font-bold text-green-700">
+                      {stats.totalBooks}
+                    </p>
                   </div>
-                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur">
-                    <FaBook className="w-6 h-6 text-white" />
-                  </div>
+                  <FaBook className="w-8 h-8 text-green-400" />
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-teal-500 to-cyan-600 rounded-xl shadow-lg p-6 text-white">
+              <div className="bg-teal-50 rounded-lg border border-teal-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-teal-100 text-sm font-medium">
-                      Ibyegeranyo by'Ubuzima
+                    <p className="text-xs text-teal-600 uppercase font-medium">
+                      Documentaries
                     </p>
-                    <p className="text-3xl font-bold mt-1">{stats.totalDocumentaries}</p>
+                    <p className="text-2xl font-bold text-teal-700">
+                      {stats.totalDocumentaries}
+                    </p>
                   </div>
-                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur">
-                    <FaFilm className="w-6 h-6 text-white" />
-                  </div>
+                  <FaFilm className="w-8 h-8 text-teal-400" />
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-red-500 to-pink-600 rounded-xl shadow-lg p-6 text-white">
+              <div className="bg-red-50 rounded-lg border border-red-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-red-100 text-sm font-medium">
-                      Ibyiciro by'Ubuzima
+                    <p className="text-xs text-red-600 uppercase font-medium">
+                      Categories
                     </p>
-                    <p className="text-3xl font-bold mt-1">{stats.totalCategories}</p>
+                    <p className="text-2xl font-bold text-red-700">
+                      {stats.totalCategories}
+                    </p>
                   </div>
-                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur">
-                    <FaHeart className="w-6 h-6 text-white" />
-                  </div>
+                  <FaHeart className="w-8 h-8 text-red-400" />
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-lg p-6 text-white">
+              <div className="bg-pink-50 rounded-lg border border-pink-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-purple-100 text-sm font-medium">
-                      Abahanga mu Buvuzi
+                    <p className="text-xs text-pink-600 uppercase font-medium">
+                      Likes
                     </p>
-                    <p className="text-3xl font-bold mt-1">{stats.totalExperts}</p>
+                    <p className="text-2xl font-bold text-pink-700">
+                      {stats.totalLikes.toLocaleString()}
+                    </p>
                   </div>
-                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur">
-                    <FaUser className="w-6 h-6 text-white" />
+                  <FaThumbsUp className="w-8 h-8 text-pink-400" />
+                </div>
+              </div>
+
+              <div className="bg-indigo-50 rounded-lg border border-indigo-200 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-indigo-600 uppercase font-medium">
+                      Comments
+                    </p>
+                    <p className="text-2xl font-bold text-indigo-700">
+                      {stats.totalComments.toLocaleString()}
+                    </p>
                   </div>
+                  <FaComment className="w-8 h-8 text-indigo-400" />
                 </div>
               </div>
             </div>
 
             {/* Search and Filters */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 mb-8">
+            <div className="bg-white rounded-lg border border-gray-200 p-4 mb-8">
               <div className="flex flex-col md:flex-row gap-4">
                 <div className="flex-1 relative">
                   <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -474,15 +596,15 @@ export default function HealthAdminPage() {
                     placeholder="Search by title, author, or narrator..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500 focus:border-green-500"
                   />
                 </div>
-                
+
                 <div className="flex flex-wrap gap-2">
                   <select
                     value={filterType}
                     onChange={(e) => setFilterType(e.target.value as any)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-green-500"
                   >
                     <option value="all">All Types</option>
                     <option value="book">Books Only</option>
@@ -492,21 +614,31 @@ export default function HealthAdminPage() {
                   <select
                     value={filterFocus}
                     onChange={(e) => setFilterFocus(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-green-500"
                   >
                     <option value="all">All Focus Areas</option>
-                    {focusAreas.map(f => (
-                      <option key={f} value={f}>{f}</option>
+                    {focusAreas.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
                     ))}
                   </select>
 
                   <select
-                    value={filterFeatured === null ? "all" : filterFeatured ? "featured" : "not"}
+                    value={
+                      filterFeatured === null
+                        ? "all"
+                        : filterFeatured
+                          ? "featured"
+                          : "not"
+                    }
                     onChange={(e) => {
                       const val = e.target.value;
-                      setFilterFeatured(val === "all" ? null : val === "featured");
+                      setFilterFeatured(
+                        val === "all" ? null : val === "featured",
+                      );
                     }}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-green-500"
                   >
                     <option value="all">All Items</option>
                     <option value="featured">Featured Only</option>
@@ -517,9 +649,9 @@ export default function HealthAdminPage() {
             </div>
 
             {/* Form Card */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden mb-8">
-              <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
-                <h2 className="font-semibold text-gray-700 flex items-center gap-2">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-8">
+              <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+                <h2 className="font-medium text-gray-700 flex items-center gap-2">
                   {editingItem ? (
                     <>
                       <FaEdit className="text-blue-500" /> Edit Health Item
@@ -546,7 +678,6 @@ export default function HealthAdminPage() {
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Title */}
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Title <span className="text-red-500">*</span>
@@ -556,25 +687,25 @@ export default function HealthAdminPage() {
                       value={formData.title}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500"
                     />
                   </div>
 
-                  {/* Type Selection */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Type
+                    </label>
                     <select
                       name="type"
                       value={formData.type}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500"
                     >
                       <option value="book">Book</option>
                       <option value="documentary">Documentary</option>
                     </select>
                   </div>
 
-                  {/* Author / Narrator */}
                   {formData.type === "book" ? (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -585,7 +716,7 @@ export default function HealthAdminPage() {
                         value={formData.author || ""}
                         onChange={handleChange}
                         required={formData.type === "book"}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500"
                       />
                     </div>
                   ) : (
@@ -598,12 +729,11 @@ export default function HealthAdminPage() {
                         value={formData.narrator || ""}
                         onChange={handleChange}
                         required={formData.type === "documentary"}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500"
                       />
                     </div>
                   )}
 
-                  {/* Published Date */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Published Date <span className="text-red-500">*</span>
@@ -614,11 +744,10 @@ export default function HealthAdminPage() {
                       value={formData.published_date}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500"
                     />
                   </div>
 
-                  {/* Category */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Category <span className="text-red-500">*</span>
@@ -628,15 +757,16 @@ export default function HealthAdminPage() {
                       value={formData.category}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500"
                     >
-                      {categories.map(c => (
-                        <option key={c} value={c}>{c}</option>
+                      {categories.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
                       ))}
                     </select>
                   </div>
 
-                  {/* Focus Area */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Focus Area <span className="text-red-500">*</span>
@@ -646,15 +776,16 @@ export default function HealthAdminPage() {
                       value={formData.focus_area}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500"
                     >
-                      {focusAreas.map(f => (
-                        <option key={f} value={f}>{f}</option>
+                      {focusAreas.map((f) => (
+                        <option key={f} value={f}>
+                          {f}
+                        </option>
                       ))}
                     </select>
                   </div>
 
-                  {/* Language */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Language
@@ -663,100 +794,81 @@ export default function HealthAdminPage() {
                       name="language"
                       value={formData.language}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500"
                     />
                   </div>
 
-                  {/* Book-specific fields */}
                   {formData.type === "book" && (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Pages</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Pages
+                        </label>
                         <input
                           type="number"
                           name="pages"
                           value={formData.pages || ""}
                           onChange={handleNumberChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">ISBN</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          ISBN
+                        </label>
                         <input
                           name="isbn"
                           value={formData.isbn || ""}
                           onChange={handleChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Publisher</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Publisher
+                        </label>
                         <input
                           name="publisher"
                           value={formData.publisher || ""}
                           onChange={handleChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500"
                         />
                       </div>
                     </>
                   )}
 
-                  {/* Documentary-specific fields */}
                   {formData.type === "documentary" && (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Duration (e.g., 2h 30m)</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Duration
+                        </label>
                         <input
                           name="duration"
                           value={formData.duration || ""}
                           onChange={handleChange}
                           placeholder="2h 30m"
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">YouTube URL</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          YouTube URL
+                        </label>
                         <input
                           name="youtube_url"
                           value={formData.youtube_url || ""}
                           onChange={handleChange}
                           placeholder="https://youtube.com/watch?v=..."
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500"
                         />
                       </div>
                     </>
                   )}
 
-                  {/* Rating */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Rating (0-5)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="5"
-                      name="rating"
-                      value={formData.rating}
-                      onChange={handleNumberChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    />
-                  </div>
-
-                  {/* Views (read-only) */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Views</label>
-                    <input
-                      type="number"
-                      value={formData.views}
-                      disabled
-                      className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-500"
-                    />
-                  </div>
-
-                  {/* Checkboxes */}
                   <div className="flex items-center gap-6 flex-wrap">
                     <label className="flex items-center gap-2">
                       <input
@@ -788,14 +900,13 @@ export default function HealthAdminPage() {
                         onChange={handleChange}
                         className="w-4 h-4 text-green-500 rounded"
                       />
-                      <span className="text-sm text-gray-700 flex items-center gap-1">
-                        <FaSearch className="text-blue-500" /> Medical Certified
+                      <span className="text-sm text-gray-700">
+                        Medical Certified
                       </span>
                     </label>
                   </div>
                 </div>
 
-                {/* Description */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Description <span className="text-red-500">*</span>
@@ -806,7 +917,7 @@ export default function HealthAdminPage() {
                     onChange={handleChange}
                     required
                     rows={4}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-green-500"
                   />
                 </div>
 
@@ -827,7 +938,7 @@ export default function HealthAdminPage() {
                       type="button"
                       onClick={() => coverInputRef.current?.click()}
                       disabled={uploadingCover}
-                      className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:ring-2 focus:ring-green-500 disabled:bg-gray-100 flex items-center gap-2"
+                      className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-100 flex items-center gap-2"
                     >
                       {uploadingCover ? (
                         <>
@@ -846,13 +957,14 @@ export default function HealthAdminPage() {
                     )}
                   </div>
 
-                  {/* Cover Preview */}
                   {(previewCover || formData.cover_image) && (
                     <div className="mt-4">
                       <p className="text-xs text-gray-500 mb-2">Preview:</p>
-                      <div className="relative w-40 h-40 rounded-lg border border-gray-300 overflow-hidden bg-gray-100">
-                        <Image
-                          src={previewCover || formData.cover_image}
+                      <div className="relative w-40 h-40 rounded-md border border-gray-300 overflow-hidden bg-gray-100">
+                        <ClientImage
+                          src={getValidImageUrl(
+                            previewCover || formData.cover_image,
+                          )}
                           alt="Preview"
                           fill
                           className="object-cover"
@@ -862,7 +974,7 @@ export default function HealthAdminPage() {
                   )}
                 </div>
 
-                {/* PDF Upload (for books) */}
+                {/* PDF Upload */}
                 {formData.type === "book" && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -880,7 +992,7 @@ export default function HealthAdminPage() {
                         type="button"
                         onClick={() => pdfInputRef.current?.click()}
                         disabled={uploadingPdf}
-                        className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:ring-2 focus:ring-green-500 disabled:bg-gray-100 flex items-center gap-2"
+                        className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-100 flex items-center gap-2"
                       >
                         {uploadingPdf ? (
                           <>
@@ -913,19 +1025,18 @@ export default function HealthAdminPage() {
                   </div>
                 )}
 
-                {/* Form Actions */}
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                   <button
                     type="button"
                     onClick={resetForm}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                   >
                     <FaTimes /> Clear
                   </button>
                   <button
                     type="submit"
                     disabled={loading || uploadingCover || uploadingPdf}
-                    className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-green-300 flex items-center gap-2"
+                    className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-green-300 flex items-center gap-2"
                   >
                     {loading ? (
                       <>
@@ -946,28 +1057,27 @@ export default function HealthAdminPage() {
             </div>
 
             {/* Health Items Table */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <FaHeart className="w-4 h-4 text-green-600" />
-                    </div>
-                    <div>
-                      <h2 className="font-semibold text-gray-800">Ubuzima Collection</h2>
-                      <p className="text-xs text-gray-500 mt-0.5">Manage all health books and documentaries</p>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <FaHeart className="w-5 h-5 text-gray-500" />
+                    <h2 className="font-medium text-gray-800">
+                      Ubuzima Collection
+                    </h2>
+                    <span className="text-xs text-gray-500">
+                      Manage health books and documentaries
+                    </span>
                   </div>
-                  
-                  <div className="flex items-center gap-3">
-                    <div className="px-3 py-1.5 bg-green-50 rounded-lg border border-green-100">
+                  <div className="flex items-center gap-2">
+                    <div className="px-3 py-1 bg-green-50 rounded-md border border-green-100">
                       <span className="text-xs font-medium text-green-700">
-                        📚 {stats.totalBooks} Books
+                        {stats.totalBooks} Books
                       </span>
                     </div>
-                    <div className="px-3 py-1.5 bg-teal-50 rounded-lg border border-teal-100">
+                    <div className="px-3 py-1 bg-teal-50 rounded-md border border-teal-100">
                       <span className="text-xs font-medium text-teal-700">
-                        🎬 {stats.totalDocumentaries} Documentaries
+                        {stats.totalDocumentaries} Documentaries
                       </span>
                     </div>
                   </div>
@@ -975,26 +1085,29 @@ export default function HealthAdminPage() {
               </div>
 
               {loading ? (
-                <div className="p-16 text-center">
-                  <div className="relative">
-                    <div className="w-16 h-16 border-4 border-gray-200 rounded-full"></div>
-                    <div className="absolute top-0 left-0 w-16 h-16 border-4 border-green-500 rounded-full border-t-transparent animate-spin"></div>
+                <div className="p-12 text-center">
+                  <div className="inline-flex flex-col items-center gap-3">
+                    <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
+                    <p className="text-gray-500 text-sm">Loading items...</p>
                   </div>
-                  <p className="text-gray-500 font-medium mt-4">Loading health items...</p>
                 </div>
               ) : filteredItems.length === 0 ? (
-                <div className="p-16 text-center">
-                  <div className="inline-flex flex-col items-center gap-4 max-w-sm">
-                    <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
-                      <FaHeart className="w-10 h-10 text-gray-400" />
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-800">No items found</h3>
-                    <p className="text-gray-500 text-sm">
-                      {searchQuery || filterFocus !== 'all' || filterType !== 'all' 
-                        ? "Try adjusting your filters to see more results" 
-                        : "Get started by adding your first health item"}
+                <div className="p-12 text-center">
+                  <div className="inline-flex flex-col items-center gap-3">
+                    <FaHeart className="w-12 h-12 text-gray-300" />
+                    <h3 className="text-base font-medium text-gray-700">
+                      No items found
+                    </h3>
+                    <p className="text-gray-500 text-sm max-w-sm">
+                      {searchQuery ||
+                      filterFocus !== "all" ||
+                      filterType !== "all"
+                        ? "Try adjusting your filters"
+                        : "Add your first health item using the form above"}
                     </p>
-                    {(searchQuery || filterFocus !== 'all' || filterType !== 'all') && (
+                    {(searchQuery ||
+                      filterFocus !== "all" ||
+                      filterType !== "all") && (
                       <button
                         onClick={() => {
                           setSearchQuery("");
@@ -1002,9 +1115,9 @@ export default function HealthAdminPage() {
                           setFilterType("all");
                           setFilterFeatured(null);
                         }}
-                        className="mt-2 px-4 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors text-sm font-medium"
+                        className="mt-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-md text-sm hover:bg-gray-200"
                       >
-                        Clear all filters
+                        Clear filters
                       </button>
                     )}
                   </div>
@@ -1014,70 +1127,85 @@ export default function HealthAdminPage() {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-4 text-left">
-                          <input type="checkbox" className="rounded border-gray-300 text-green-600 focus:ring-green-500" />
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Type
                         </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Title & Author</th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Category</th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Focus Area</th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Views</th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Rating</th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Featured</th>
-                        <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Title & Author
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Category
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Focus Area
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Views
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Likes
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Comments
+                        </th>
+
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Featured
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {filteredItems.map((item) => (
-                        <tr key={item.id} className="hover:bg-green-50/30 transition-colors group">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <input type="checkbox" className="rounded border-gray-300 text-green-600 focus:ring-green-500" />
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-3 py-1.5 text-xs font-semibold rounded-full inline-flex items-center gap-1.5 ${
-                              item.type === 'book' 
-                                ? 'bg-green-100 text-green-800 border border-green-200' 
-                                : 'bg-teal-100 text-teal-800 border border-teal-200'
-                            }`}>
-                              {item.type === 'book' ? (
-                                <>
-                                  <FaBook className="w-3 h-3" />
-                                  Book
-                                </>
+                        <tr
+                          key={item.id}
+                          className="hover:bg-gray-50 transition-colors"
+                        >
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md ${
+                                item.type === "book"
+                                  ? "bg-green-50 text-green-700"
+                                  : "bg-teal-50 text-teal-700"
+                              }`}
+                            >
+                              {item.type === "book" ? (
+                                <FaBook className="w-3 h-3" />
                               ) : (
-                                <>
-                                  <FaFilm className="w-3 h-3" />
-                                  Documentary
-                                </>
+                                <FaFilm className="w-3 h-3" />
                               )}
+                              {item.type === "book" ? "Book" : "Documentary"}
                             </span>
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-4">
-                              <div className="relative w-12 h-12 rounded-lg overflow-hidden shadow-sm ring-2 ring-gray-100 group-hover:ring-green-200 transition-all">
-                                <Image
-                                  src={item.cover_image}
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="relative w-10 h-10 rounded-md overflow-hidden bg-gray-100 flex-shrink-0">
+                                <ClientImage
+                                  src={getValidImageUrl(item.cover_image)}
                                   alt={item.title}
                                   fill
                                   className="object-cover"
                                 />
                                 {item.is_new && (
-                                  <div className="absolute top-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                                  <div className="absolute top-0 right-0 w-2 h-2 bg-green-500 rounded-full"></div>
                                 )}
                               </div>
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <h3 className="text-sm font-semibold text-gray-900">
-                                    {item.title.length > 40 ? `${item.title.substring(0, 40)}...` : item.title}
+                                  <h3 className="text-sm font-medium text-gray-900">
+                                    {item.title.length > 40
+                                      ? `${item.title.substring(0, 40)}...`
+                                      : item.title}
                                   </h3>
                                   {item.is_featured && (
-                                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[10px] font-bold">
+                                    <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
                                       Featured
                                     </span>
                                   )}
                                   {item.certified && (
-                                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-bold flex items-center gap-0.5">
-                                      <FaSearch className="w-2 h-2" />
+                                    <span className="text-[10px] font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
                                       Certified
                                     </span>
                                   )}
@@ -1085,75 +1213,86 @@ export default function HealthAdminPage() {
                                 <div className="flex items-center gap-1 mt-1">
                                   <FaUser className="w-3 h-3 text-gray-400" />
                                   <span className="text-xs text-gray-500">
-                                    {item.type === 'book' ? item.author : item.narrator}
+                                    {item.type === "book"
+                                      ? item.author
+                                      : item.narrator}
                                   </span>
                                 </div>
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="px-2 py-1 bg-green-50 text-green-700 rounded-md text-xs font-medium border border-green-100">
-                              {item.category.split(' ')[0]}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="px-2 py-1 bg-green-50 text-green-700 rounded-md text-xs">
+                              {item.category.split(" ")[0]}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 rounded-md text-xs font-medium ${
-                              item.focus_area === 'Nutrition' ? 'bg-green-50 text-green-700 border border-green-100' :
-                              item.focus_area === 'Fitness' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
-                              item.focus_area === 'Mental Health' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
-                              item.focus_area === 'Medical' ? 'bg-red-50 text-red-700 border border-red-100' :
-                              item.focus_area === 'Wellness' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
-                              'bg-teal-50 text-teal-700 border border-teal-100'
-                            }`}>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span
+                              className={`px-2 py-1 rounded-md text-xs ${
+                                item.focus_area === "Nutrition"
+                                  ? "bg-green-50 text-green-700"
+                                  : item.focus_area === "Fitness"
+                                    ? "bg-blue-50 text-blue-700"
+                                    : item.focus_area === "Mental Health"
+                                      ? "bg-purple-50 text-purple-700"
+                                      : item.focus_area === "Medical"
+                                        ? "bg-red-50 text-red-700"
+                                        : item.focus_area === "Wellness"
+                                          ? "bg-amber-50 text-amber-700"
+                                          : "bg-teal-50 text-teal-700"
+                              }`}
+                            >
                               {item.focus_area}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
                             {item.views.toLocaleString()}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-1">
-                              <span className="text-sm font-medium text-gray-900 mr-1">
-                                {item.rating?.toFixed(1) || '0.0'}
-                              </span>
-                              <FaStar className="w-4 h-4 text-amber-400" />
-                            </div>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                            {item.like_count?.toLocaleString() || 0}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                            {item.comment_count?.toLocaleString() || 0}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
                             <button
-                              onClick={() => toggleFeatured(item.id!, item.is_featured)}
-                              className={`p-2 rounded-lg transition-all ${
-                                item.is_featured 
-                                  ? 'text-amber-500 hover:bg-amber-100' 
-                                  : 'text-gray-300 hover:text-amber-500 hover:bg-amber-50'
-                              }`}
-                              title={item.is_featured ? "Remove from featured" : "Add to featured"}
+                              onClick={() =>
+                                toggleFeatured(item.id!, item.is_featured)
+                              }
+                              className={`p-1.5 rounded-md transition-colors ${item.is_featured ? "text-amber-500 hover:bg-amber-50" : "text-gray-300 hover:text-amber-500 hover:bg-amber-50"}`}
+                              title={
+                                item.is_featured
+                                  ? "Remove from featured"
+                                  : "Add to featured"
+                              }
                             >
-                              <FaStar size={18} />
+                              <FaStar size={14} />
                             </button>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right">
-                            <div className="flex items-center justify-end gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                          <td className="px-4 py-3 whitespace-nowrap text-right">
+                            <div className="flex items-center justify-end gap-1">
                               <button
-                                onClick={() => window.open(`/ubuzima/${item.id}`, '_blank')}
-                                className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                                title="Preview"
+                                onClick={() =>
+                                  window.open(`/ubuzima/${item.id}`, "_blank")
+                                }
+                                className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+                                title="View"
                               >
-                                <FaEye size={16} />
+                                <FaEye size={14} />
                               </button>
                               <button
                                 onClick={() => handleEdit(item)}
-                                className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
                                 title="Edit"
                               >
-                                <FaEdit size={16} />
+                                <FaEdit size={14} />
                               </button>
                               <button
                                 onClick={() => handleDelete(item.id!)}
-                                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                                 title="Delete"
                               >
-                                <FaTrash size={16} />
+                                <FaTrash size={14} />
                               </button>
                             </div>
                           </td>
@@ -1161,6 +1300,19 @@ export default function HealthAdminPage() {
                       ))}
                     </tbody>
                   </table>
+
+                  <div className="px-6 py-3 bg-gray-50 border-t border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-gray-500">
+                        Showing{" "}
+                        <span className="font-medium">
+                          {filteredItems.length}
+                        </span>{" "}
+                        of <span className="font-medium">{items.length}</span>{" "}
+                        items
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

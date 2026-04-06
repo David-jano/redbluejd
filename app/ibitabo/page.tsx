@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Image from "next/image";
 import { supabase } from "@/lib/supabase";
+import ClientImage from "../componets/ClientImage";
 import {
   Search,
   Eye,
@@ -18,7 +18,6 @@ import {
   Loader2,
   Calendar,
 } from "lucide-react";
-// NEW IMPORTS
 import { FaHeart, FaComment } from "react-icons/fa";
 import ContentCommentsModal from "../componets/ContentCommentsModal";
 import CardLikeButton from "../componets/CardLikeButton";
@@ -39,9 +38,29 @@ interface Book {
   is_featured: boolean | null;
   is_new: boolean | null;
   pdf_url: string | null;
-  // NEW: Add comment and like counts
   comment_count?: number;
   like_count?: number;
+}
+
+// Helper function for Vercel image paths
+function getValidImageUrl(imageUrl: string | null | undefined): string {
+  if (!imageUrl) {
+    return "https://placehold.co/800x600/e0e0e0/999?text=No+Image";
+  }
+
+  if (imageUrl.startsWith("http")) {
+    return imageUrl;
+  }
+
+  if (imageUrl.startsWith("/images/")) {
+    return imageUrl.replace("/images/", "/uploads/");
+  }
+
+  if (imageUrl.startsWith("/uploads/")) {
+    return imageUrl;
+  }
+
+  return imageUrl;
 }
 
 const SimplePDFViewer = ({
@@ -55,7 +74,6 @@ const SimplePDFViewer = ({
 }) => {
   const pdfUrl = item.pdf_url || "";
 
-  // Track view when PDF viewer opens
   useEffect(() => {
     if (onViewTracked) {
       onViewTracked();
@@ -100,11 +118,7 @@ const SimplePDFViewer = ({
       </div>
       <div className="flex-1 bg-stone-100">
         {pdfUrl ? (
-          <iframe
-            src={pdfUrl}
-            className="w-full h-full"
-            title={item.title}
-          />
+          <iframe src={pdfUrl} className="w-full h-full" title={item.title} />
         ) : (
           <div className="flex items-center justify-center h-full text-stone-500">
             PDF not available
@@ -123,12 +137,10 @@ export default function BooksPage() {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [selectedPDF, setSelectedPDF] = useState<Book | null>(null);
   const [showActions, setShowActions] = useState<number | null>(null);
-
-  // NEW: State for comments modal
   const [commentsModalOpen, setCommentsModalOpen] = useState(false);
-  const [selectedCommentItem, setSelectedCommentItem] = useState<Book | null>(null);
-
-  // State for fetched data
+  const [selectedCommentItem, setSelectedCommentItem] = useState<Book | null>(
+    null,
+  );
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -151,50 +163,49 @@ export default function BooksPage() {
     "romance",
   ];
 
-  // Fetch data from Supabase
   useEffect(() => {
     fetchBooks();
   }, []);
 
+  // OPTIMIZED: Parallel fetching for books, comments, and likes
   const fetchBooks = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("books")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const [booksResult, commentsResult, likesResult] = await Promise.all([
+        supabase
+          .from("books")
+          .select("*")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("content_comments")
+          .select("content_id")
+          .eq("content_type", "books"),
+        supabase
+          .from("content_likes")
+          .select("content_id")
+          .eq("content_type", "books"),
+      ]);
 
-      if (error) throw error;
+      if (booksResult.error) throw booksResult.error;
 
-      // Fetch comment counts for all items
-      const { data: commentData } = await supabase
-        .from("content_comments")
-        .select("content_id")
-        .eq("content_type", "books");
-
-      // Fetch like counts for all items
-      const { data: likeData } = await supabase
-        .from("content_likes")
-        .select("content_id")
-        .eq("content_type", "books");
-
-      // Create maps for counts
       const commentMap = new Map();
-      if (commentData) {
-        commentData.forEach((item: any) => {
-          commentMap.set(item.content_id, (commentMap.get(item.content_id) || 0) + 1);
+      if (commentsResult.data) {
+        commentsResult.data.forEach((item: any) => {
+          commentMap.set(
+            item.content_id,
+            (commentMap.get(item.content_id) || 0) + 1,
+          );
         });
       }
 
       const likeMap = new Map();
-      if (likeData) {
-        likeData.forEach((item: any) => {
+      if (likesResult.data) {
+        likesResult.data.forEach((item: any) => {
           likeMap.set(item.content_id, (likeMap.get(item.content_id) || 0) + 1);
         });
       }
 
-      // Merge counts with items
-      const itemsWithCounts = (data || []).map((item) => ({
+      const itemsWithCounts = (booksResult.data || []).map((item) => ({
         ...item,
         comment_count: commentMap.get(item.id) || 0,
         like_count: likeMap.get(item.id) || 0,
@@ -213,25 +224,15 @@ export default function BooksPage() {
     const totalBooks = data.length;
     const totalViews = data.reduce((acc, i) => acc + (i.views || 0), 0);
     const totalLikes = data.reduce((acc, i) => acc + (i.like_count || 0), 0);
-    
-    // Get unique genres
-    const allGenres = data.flatMap(book => book.genre || []);
+    const allGenres = data.flatMap((book) => book.genre || []);
     const uniqueGenres = new Set(allGenres).size;
 
-    setStats({
-      totalBooks,
-      totalViews,
-      totalGenres: uniqueGenres,
-      totalLikes,
-    });
+    setStats({ totalBooks, totalViews, totalGenres: uniqueGenres, totalLikes });
   };
 
-  // 🔥 VIEW TRACKING FUNCTION
   const trackView = async (book: Book) => {
     try {
       const newViews = (book.views || 0) + 1;
-      
-      // Update in database
       const { error } = await supabase
         .from("books")
         .update({ views: newViews })
@@ -239,30 +240,18 @@ export default function BooksPage() {
 
       if (error) throw error;
 
-      // Update local state
-      setBooks(prevBooks => 
-        prevBooks.map(b => 
-          b.id === book.id 
-            ? { ...b, views: newViews } 
-            : b
-        )
+      setBooks((prevBooks) =>
+        prevBooks.map((b) =>
+          b.id === book.id ? { ...b, views: newViews } : b,
+        ),
       );
 
-      // Update stats
-      setStats(prev => ({
-        ...prev,
-        totalViews: prev.totalViews + 1
-      }));
-
-      console.log(`View tracked for book: ${book.title} (Total: ${newViews})`);
-      return true;
+      setStats((prev) => ({ ...prev, totalViews: prev.totalViews + 1 }));
     } catch (error) {
       console.error("Error tracking view:", error);
-      return false;
     }
   };
 
-  // Filter and sort
   const filteredBooks = books.filter((book) => {
     const matchesSearch =
       book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -293,46 +282,45 @@ export default function BooksPage() {
     }
   });
 
-  // 🔥 UPDATED HANDLERS WITH VIEW TRACKING
   const handleBookClick = async (book: Book) => {
-    // Track view when book modal opens
     await trackView(book);
     setSelectedBook(book);
   };
 
   const handleRead = async (book: Book) => {
     if (book.pdf_url) {
-      // Track view when PDF is opened
       await trackView(book);
       setSelectedPDF(book);
-    } else {
-      alert("PDF not available for this book");
     }
   };
 
   const handleDownload = (book: Book) => {
     if (book.pdf_url) {
       window.open(book.pdf_url, "_blank");
-    } else {
-      alert("PDF not available for download");
     }
   };
 
-  // 🔥 TRACK VIEW WHEN PDF VIEWER OPENS
   const handlePDFViewTracked = async () => {
     if (selectedPDF) {
       await trackView(selectedPDF);
     }
   };
 
-  // NEW: Handle opening comments modal
   const handleOpenComments = (book: Book, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent triggering the card click
+    e.stopPropagation();
     setSelectedCommentItem(book);
     setCommentsModalOpen(true);
   };
 
-  const StatCard = ({ icon: Icon, label, value }: { icon: any; label: string; value: string }) => (
+  const StatCard = ({
+    icon: Icon,
+    label,
+    value,
+  }: {
+    icon: any;
+    label: string;
+    value: string;
+  }) => (
     <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 shadow-sm border border-gray-200">
       <div className="flex items-center gap-3">
         <div className="p-2 bg-blue-50 rounded-lg">
@@ -375,12 +363,28 @@ export default function BooksPage() {
           </p>
         </div>
 
-        {/* Stats Section - Shows REAL view counts! */}
+        {/* Stats Section */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <StatCard icon={BookOpen} label="Total Books" value={stats.totalBooks.toString()} />
-          <StatCard icon={Eye} label="Total Views" value={stats.totalViews.toLocaleString()} />
-          <StatCard icon={BookOpen} label="Genres" value={stats.totalGenres.toString()} />
-          <StatCard icon={FaHeart} label="Total Likes" value={stats.totalLikes.toLocaleString()} />
+          <StatCard
+            icon={BookOpen}
+            label="Total Books"
+            value={stats.totalBooks.toString()}
+          />
+          <StatCard
+            icon={Eye}
+            label="Total Views"
+            value={stats.totalViews.toLocaleString()}
+          />
+          <StatCard
+            icon={BookOpen}
+            label="Genres"
+            value={stats.totalGenres.toString()}
+          />
+          <StatCard
+            icon={FaHeart}
+            label="Total Likes"
+            value={stats.totalLikes.toLocaleString()}
+          />
         </div>
 
         {/* Search & Filters */}
@@ -399,13 +403,12 @@ export default function BooksPage() {
               />
             </div>
 
-            {/* Filters */}
             <div className="flex flex-wrap gap-4 items-center">
               <div className="relative">
                 <select
                   value={selectedGenre}
                   onChange={(e) => setSelectedGenre(e.target.value)}
-                  className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500"
                 >
                   {genres.map((tag: string) => (
                     <option key={tag} value={tag}>
@@ -415,37 +418,33 @@ export default function BooksPage() {
                     </option>
                   ))}
                 </select>
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <ChevronDown className="h-4 w-4 text-gray-400" />
-                </div>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
 
               <div className="relative">
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                  className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="newest">Newest First</option>
                   <option value="oldest">Oldest First</option>
                   <option value="views">Most Views</option>
                   <option value="title">Title A-Z</option>
                 </select>
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <ChevronDown className="h-4 w-4 text-gray-400" />
-                </div>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
 
               <div className="flex bg-gray-100 rounded-xl p-1">
                 <button
                   onClick={() => setViewMode("grid")}
-                  className={`p-2 rounded-lg transition-all duration-200 ${viewMode === "grid" ? "bg-white shadow-sm text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+                  className={`p-2 rounded-lg transition-all ${viewMode === "grid" ? "bg-white shadow-sm text-blue-600" : "text-gray-500"}`}
                 >
                   <Grid className="w-5 h-5" />
                 </button>
                 <button
                   onClick={() => setViewMode("list")}
-                  className={`p-2 rounded-lg transition-all duration-200 ${viewMode === "list" ? "bg-white shadow-sm text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+                  className={`p-2 rounded-lg transition-all ${viewMode === "list" ? "bg-white shadow-sm text-blue-600" : "text-gray-500"}`}
                 >
                   <List className="w-5 h-5" />
                 </button>
@@ -469,11 +468,11 @@ export default function BooksPage() {
           </div>
         ) : (
           <div
-            className={`${
+            className={
               viewMode === "grid"
                 ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
                 : "space-y-6"
-            }`}
+            }
           >
             {sortedBooks.map((book) => (
               <div
@@ -487,18 +486,20 @@ export default function BooksPage() {
               >
                 {/* Cover Image */}
                 <div
-                  className={`relative overflow-hidden bg-gray-100 ${
-                    viewMode === "list" ? "w-32 flex-shrink-0" : "h-48"
-                  }`}
+                  className={`relative overflow-hidden bg-gray-100 ${viewMode === "list" ? "w-32 flex-shrink-0" : "h-48"}`}
                 >
-                  <Image
-                    src={book.cover_image}
+                  <ClientImage
+                    src={getValidImageUrl(book.cover_image)}
                     alt={book.title}
                     fill
                     className="object-cover transition-transform duration-300 group-hover:scale-105"
+                    sizes={
+                      viewMode === "list"
+                        ? "128px"
+                        : "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
+                    }
                   />
 
-                  {/* Badges */}
                   <div className="absolute top-3 left-3 space-y-2">
                     {book.is_featured && (
                       <span className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
@@ -512,7 +513,6 @@ export default function BooksPage() {
                     )}
                   </div>
 
-                  {/* View Count Badge */}
                   <div className="absolute bottom-3 right-3">
                     <span className="bg-black/75 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
                       <Eye className="w-3 h-3" />
@@ -520,33 +520,23 @@ export default function BooksPage() {
                     </span>
                   </div>
 
-                  {/* Action Buttons */}
                   <div
-                    className={`absolute top-3 right-3 transition-all duration-300 ${
-                      showActions === book.id ? "opacity-100" : "opacity-0"
-                    } space-y-2`}
+                    className={`absolute top-3 right-3 transition-all duration-300 ${showActions === book.id ? "opacity-100" : "opacity-0"} space-y-2`}
                   >
-                    <button 
+                    <button
                       className="w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Add bookmark functionality
-                      }}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <Bookmark className="w-4 h-4 text-gray-600" />
                     </button>
-                    <button 
+                    <button
                       className="w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Add share functionality
-                      }}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <Share2 className="w-4 h-4 text-gray-600" />
                     </button>
                   </div>
 
-                  {/* Quick Actions Overlay */}
                   <div
                     className={`absolute inset-0 bg-black/60 flex items-center justify-center transition-all duration-300 ${
                       showActions === book.id
@@ -593,35 +583,40 @@ export default function BooksPage() {
                     <div className="flex items-center gap-4 mb-2">
                       <div className="flex items-center text-gray-600">
                         <User className="w-4 h-4 mr-1" />
-                        <span className="text-sm font-medium">{book.author}</span>
+                        <span className="text-sm font-medium">
+                          {book.author}
+                        </span>
                       </div>
-                      
-                      {/* Card Like Button - Directly on the card */}
-                      <CardLikeButton 
+
+                      <CardLikeButton
                         contentId={book.id}
                         contentType="books"
                         initialCount={book.like_count || 0}
                         onLikeChange={(newCount) => {
-                          // Update the book's like count in local state
-                          setBooks(prevBooks => 
-                            prevBooks.map(b => 
-                              b.id === book.id ? { ...b, like_count: newCount } : b
-                            )
+                          setBooks((prevBooks) =>
+                            prevBooks.map((b) =>
+                              b.id === book.id
+                                ? { ...b, like_count: newCount }
+                                : b,
+                            ),
                           );
-                          // Update stats
-                          setStats(prev => ({
+                          setStats((prev) => ({
                             ...prev,
-                            totalLikes: prev.totalLikes + (newCount - (book.like_count || 0))
+                            totalLikes:
+                              prev.totalLikes +
+                              (newCount - (book.like_count || 0)),
                           }));
                         }}
                       />
-                      
-                      <button 
+
+                      <button
                         onClick={(e) => handleOpenComments(book, e)}
                         className="flex items-center gap-1 text-gray-500 hover:text-blue-600 transition-colors"
                       >
                         <FaComment className="w-4 h-4" />
-                        <span className="text-xs font-medium">{book.comment_count || 0}</span>
+                        <span className="text-xs font-medium">
+                          {book.comment_count || 0}
+                        </span>
                       </button>
                     </div>
 
@@ -657,11 +652,10 @@ export default function BooksPage() {
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
               <div className="flex flex-col lg:flex-row">
-                {/* Book Cover */}
                 <div className="lg:w-2/5 p-8 bg-gradient-to-br from-blue-50 to-purple-50">
                   <div className="relative aspect-[3/4] rounded-2xl overflow-hidden shadow-xl">
-                    <Image
-                      src={selectedBook.cover_image}
+                    <ClientImage
+                      src={getValidImageUrl(selectedBook.cover_image)}
                       alt={selectedBook.title}
                       fill
                       className="object-cover"
@@ -669,7 +663,6 @@ export default function BooksPage() {
                   </div>
                 </div>
 
-                {/* Book Details */}
                 <div className="lg:w-3/5 p-8">
                   <div className="flex justify-between items-start mb-6">
                     <div>
@@ -727,7 +720,9 @@ export default function BooksPage() {
                       </div>
                       <div>
                         <span className="text-sm text-gray-500">Publisher</span>
-                        <p className="font-medium">{selectedBook.publisher || 'N/A'}</p>
+                        <p className="font-medium">
+                          {selectedBook.publisher || "N/A"}
+                        </p>
                       </div>
                     </div>
 
@@ -779,23 +774,22 @@ export default function BooksPage() {
           </div>
         )}
 
-        {/* PDF Viewer with view tracking */}
+        {/* PDF Viewer */}
         {selectedPDF && (
-          <SimplePDFViewer 
-            item={selectedPDF} 
+          <SimplePDFViewer
+            item={selectedPDF}
             onClose={() => setSelectedPDF(null)}
             onViewTracked={handlePDFViewTracked}
           />
         )}
 
-        {/* NEW: Comments Modal */}
+        {/* Comments Modal */}
         {commentsModalOpen && selectedCommentItem && (
           <ContentCommentsModal
             isOpen={commentsModalOpen}
             onClose={() => {
               setCommentsModalOpen(false);
               setSelectedCommentItem(null);
-              // Refresh comment counts when modal closes
               fetchBooks();
             }}
             contentId={selectedCommentItem.id}

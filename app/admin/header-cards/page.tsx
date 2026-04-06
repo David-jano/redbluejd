@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import Image from "next/image";
+import ClientImage from "@/app/componets/ClientImage";
 import Link from "next/link";
 import {
   FaStar,
@@ -29,6 +29,27 @@ interface HeaderCard {
   card_type: "large" | "small";
   display_order: number;
   is_featured: boolean;
+}
+
+// Helper function for Vercel image paths
+function getValidImageUrl(imageUrl: string | null | undefined): string {
+  if (!imageUrl) {
+    return "https://placehold.co/800x600/e0e0e0/999?text=No+Image";
+  }
+  
+  if (imageUrl.startsWith('http')) {
+    return imageUrl;
+  }
+  
+  if (imageUrl.startsWith('/images/')) {
+    return imageUrl.replace('/images/', '/uploads/');
+  }
+  
+  if (imageUrl.startsWith('/uploads/')) {
+    return imageUrl;
+  }
+  
+  return imageUrl;
 }
 
 export default function HeaderCardsManagement() {
@@ -82,7 +103,6 @@ export default function HeaderCardsManagement() {
     setFormData({ ...formData, [e.target.name]: value });
   };
 
-  // Image upload handler
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -113,9 +133,20 @@ export default function HeaderCardsManagement() {
         body: uploadFormData,
       });
 
-      if (!response.ok) throw new Error("Upload failed");
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        throw new Error(`Server returned: ${text.substring(0, 100)}`);
+      }
+
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Upload failed");
+      }
+
       setFormData((prev) => ({ ...prev, image_url: data.url }));
+      alert("Image uploaded successfully!");
     } catch (error: any) {
       console.error("Upload error:", error);
       alert("Failed to upload image: " + error.message);
@@ -137,11 +168,13 @@ export default function HeaderCardsManagement() {
           .update(formData)
           .eq("id", editingCard.id);
         if (error) throw error;
+        alert("Card updated successfully!");
       } else {
         const { error } = await supabase
           .from("header_cards")
           .insert([formData]);
         if (error) throw error;
+        alert("Card created successfully!");
       }
 
       resetForm();
@@ -157,7 +190,7 @@ export default function HeaderCardsManagement() {
   const handleEdit = (card: HeaderCard) => {
     setEditingCard(card);
     setFormData(card);
-    setPreviewImage(card.image_url);
+    setPreviewImage(getValidImageUrl(card.image_url));
   };
 
   const handleDelete = async (id: number) => {
@@ -169,6 +202,7 @@ export default function HeaderCardsManagement() {
       console.error("Error deleting header card:", error);
       alert("Error deleting header card");
     } else {
+      alert("Card deleted successfully!");
       fetchCards();
     }
   };
@@ -207,7 +241,7 @@ export default function HeaderCardsManagement() {
 
   return (
     <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-      {/* Breadcrumb Navigation (matching article detail page) */}
+      {/* Breadcrumb Navigation */}
       <nav className="mb-6 text-sm text-gray-600 flex items-center gap-2 overflow-hidden whitespace-nowrap">
         <Link
           href="/admin"
@@ -412,17 +446,16 @@ export default function HeaderCardsManagement() {
               )}
             </div>
 
-            {/* Preview */}
+            {/* Preview with ClientImage */}
             {(previewImage || formData.image_url) && (
               <div className="mt-4">
                 <p className="text-xs text-gray-500 mb-2">Preview:</p>
                 <div className="relative w-40 h-40 rounded-lg border border-gray-300 overflow-hidden bg-gray-100">
-                  <Image
-                    src={previewImage || formData.image_url}
+                  <ClientImage
+                    src={getValidImageUrl(previewImage || formData.image_url)}
                     alt="Preview"
                     fill
                     className="object-cover"
-                    onError={(e) => (e.currentTarget.style.display = "none")}
                   />
                 </div>
               </div>
@@ -493,7 +526,6 @@ export default function HeaderCardsManagement() {
 
       {/* Header Cards Table */}
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-        {/* Table Header with Actions */}
         <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
@@ -505,39 +537,6 @@ export default function HeaderCardsManagement() {
                 {cards.length} cards
               </span>
             </h2>
-
-            <div className="flex items-center gap-2">
-              <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-lg transition">
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-                  />
-                </svg>
-              </button>
-              <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-lg transition">
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 6h16M4 12h16M4 18h16"
-                  />
-                </svg>
-              </button>
-            </div>
           </div>
         </div>
 
@@ -545,67 +544,14 @@ export default function HeaderCardsManagement() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-4 text-left">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="rounded border-gray-300 text-purple-500 focus:ring-purple-500"
-                    />
-                  </div>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Featured
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  <div className="flex items-center gap-1 cursor-pointer hover:text-gray-700">
-                    Featured
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
-                      />
-                    </svg>
-                  </div>
+                  Type
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  <div className="flex items-center gap-1 cursor-pointer hover:text-gray-700">
-                    Type
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8 9l4-4 4 4m0 6l-4 4-4-4"
-                      />
-                    </svg>
-                  </div>
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  <div className="flex items-center gap-1 cursor-pointer hover:text-gray-700">
-                    Order
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l5 5a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-5-5A1.994 1.994 0 013 12V7a4 4 0 014-4z"
-                      />
-                    </svg>
-                  </div>
+                  Order
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Title
@@ -622,19 +568,13 @@ export default function HeaderCardsManagement() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {cards.map((card, index) => (
+              {cards.map((card) => (
                 <tr
                   key={card.id}
                   className={`hover:bg-gray-50 transition-colors group ${
                     card.is_featured ? "bg-amber-50/50" : ""
                   }`}
                 >
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <input
-                      type="checkbox"
-                      className="rounded border-gray-300 text-purple-500 focus:ring-purple-500"
-                    />
-                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <button
                       onClick={() => toggleFeatured(card.id!, card.is_featured)}
@@ -750,7 +690,7 @@ export default function HeaderCardsManagement() {
               ))}
               {cards.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center">
+                  <td colSpan={7} className="px-6 py-12 text-center">
                     <div className="inline-flex flex-col items-center gap-3">
                       <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
                         <FaStar className="w-8 h-8 text-gray-400" />
@@ -787,12 +727,6 @@ export default function HeaderCardsManagement() {
                 </button>
                 <button className="px-3 py-1.5 bg-purple-500 text-white rounded-md text-sm font-medium hover:bg-purple-600">
                   1
-                </button>
-                <button className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                  2
-                </button>
-                <button className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                  3
                 </button>
                 <button className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
                   Next

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Image from "next/image";
 import { supabase } from "@/lib/supabase";
+import ClientImage from "../componets/ClientImage";
 import {
   Search,
   Play,
@@ -19,7 +19,6 @@ import {
   Calendar,
   Loader2,
 } from "lucide-react";
-// NEW IMPORTS
 import { FaHeart as FaHeartSolid, FaComment } from "react-icons/fa";
 import ContentCommentsModal from "../componets/ContentCommentsModal";
 import CardLikeButton from "../componets/CardLikeButton";
@@ -38,9 +37,29 @@ interface Documentary {
   tags: string[];
   is_featured: boolean | null;
   is_new: boolean | null;
-  // NEW: Add comment and like counts
   comment_count?: number;
   like_count?: number;
+}
+
+// Helper function for Vercel image paths
+function getValidImageUrl(imageUrl: string | null | undefined): string {
+  if (!imageUrl) {
+    return "https://placehold.co/800x600/e0e0e0/999?text=No+Image";
+  }
+
+  if (imageUrl.startsWith("http")) {
+    return imageUrl;
+  }
+
+  if (imageUrl.startsWith("/images/")) {
+    return imageUrl.replace("/images/", "/uploads/");
+  }
+
+  if (imageUrl.startsWith("/uploads/")) {
+    return imageUrl;
+  }
+
+  return imageUrl;
 }
 
 export default function DocumentariesPage() {
@@ -50,12 +69,9 @@ export default function DocumentariesPage() {
   const [sortBy, setSortBy] = useState("newest");
   const [selectedDoc, setSelectedDoc] = useState<Documentary | null>(null);
   const [showActions, setShowActions] = useState<number | null>(null);
-
-  // NEW: State for comments modal
   const [commentsModalOpen, setCommentsModalOpen] = useState(false);
-  const [selectedCommentItem, setSelectedCommentItem] = useState<Documentary | null>(null);
-
-  // State for fetched data
+  const [selectedCommentItem, setSelectedCommentItem] =
+    useState<Documentary | null>(null);
   const [documentaries, setDocumentaries] = useState<Documentary[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -79,50 +95,49 @@ export default function DocumentariesPage() {
     "global",
   ];
 
-  // Fetch data from Supabase
   useEffect(() => {
     fetchDocumentaries();
   }, []);
 
+  // OPTIMIZED: Parallel fetching for documentaries, comments, and likes
   const fetchDocumentaries = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("documentaries")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const [docsResult, commentsResult, likesResult] = await Promise.all([
+        supabase
+          .from("documentaries")
+          .select("*")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("content_comments")
+          .select("content_id")
+          .eq("content_type", "documentaries"),
+        supabase
+          .from("content_likes")
+          .select("content_id")
+          .eq("content_type", "documentaries"),
+      ]);
 
-      if (error) throw error;
+      if (docsResult.error) throw docsResult.error;
 
-      // Fetch comment counts for all items
-      const { data: commentData } = await supabase
-        .from("content_comments")
-        .select("content_id")
-        .eq("content_type", "documentaries");
-
-      // Fetch like counts for all items
-      const { data: likeData } = await supabase
-        .from("content_likes")
-        .select("content_id")
-        .eq("content_type", "documentaries");
-
-      // Create maps for counts
       const commentMap = new Map();
-      if (commentData) {
-        commentData.forEach((item: any) => {
-          commentMap.set(item.content_id, (commentMap.get(item.content_id) || 0) + 1);
+      if (commentsResult.data) {
+        commentsResult.data.forEach((item: any) => {
+          commentMap.set(
+            item.content_id,
+            (commentMap.get(item.content_id) || 0) + 1,
+          );
         });
       }
 
       const likeMap = new Map();
-      if (likeData) {
-        likeData.forEach((item: any) => {
+      if (likesResult.data) {
+        likesResult.data.forEach((item: any) => {
           likeMap.set(item.content_id, (likeMap.get(item.content_id) || 0) + 1);
         });
       }
 
-      // Merge counts with items
-      const itemsWithCounts = (data || []).map((item) => ({
+      const itemsWithCounts = (docsResult.data || []).map((item) => ({
         ...item,
         comment_count: commentMap.get(item.id) || 0,
         like_count: likeMap.get(item.id) || 0,
@@ -141,9 +156,11 @@ export default function DocumentariesPage() {
     const totalDocs = data.length;
     const totalViews = data.reduce((acc, doc) => acc + (doc.views || 0), 0);
     const locations = new Set(data.map((doc) => doc.location)).size;
-    const totalLikes = data.reduce((acc, doc) => acc + (doc.like_count || 0), 0);
+    const totalLikes = data.reduce(
+      (acc, doc) => acc + (doc.like_count || 0),
+      0,
+    );
 
-    // Calculate total hours from duration strings (e.g., "18:04", "1h 30m")
     let totalMinutes = 0;
     data.forEach((doc) => {
       if (doc.duration) {
@@ -166,12 +183,9 @@ export default function DocumentariesPage() {
     });
   };
 
-  // 🔥 VIEW TRACKING FUNCTION
   const trackView = async (doc: Documentary) => {
     try {
       const newViews = (doc.views || 0) + 1;
-      
-      // Update in database
       const { error } = await supabase
         .from("documentaries")
         .update({ views: newViews })
@@ -179,30 +193,16 @@ export default function DocumentariesPage() {
 
       if (error) throw error;
 
-      // Update local state
-      setDocumentaries(prevDocs => 
-        prevDocs.map(d => 
-          d.id === doc.id 
-            ? { ...d, views: newViews } 
-            : d
-        )
+      setDocumentaries((prevDocs) =>
+        prevDocs.map((d) => (d.id === doc.id ? { ...d, views: newViews } : d)),
       );
 
-      // Update stats
-      setStats(prev => ({
-        ...prev,
-        totalViews: prev.totalViews + 1
-      }));
-
-      console.log(`View tracked for: ${doc.title} (Total: ${newViews})`);
-      return true;
+      setStats((prev) => ({ ...prev, totalViews: prev.totalViews + 1 }));
     } catch (error) {
       console.error("Error tracking view:", error);
-      return false;
     }
   };
 
-  // Filter and sort
   const filteredDocs = documentaries.filter((doc) => {
     const matchesSearch =
       doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -233,22 +233,18 @@ export default function DocumentariesPage() {
     }
   });
 
-  // 🔥 UPDATED HANDLERS WITH VIEW TRACKING
   const handlePlay = async (doc: Documentary) => {
-    // Track view when documentary is played
     await trackView(doc);
     window.open(doc.youtube_url, "_blank");
   };
 
   const handleDocClick = async (doc: Documentary) => {
-    // Track view when documentary is clicked
     await trackView(doc);
     setSelectedDoc(doc);
   };
 
-  // NEW: Handle opening comments modal
   const handleOpenComments = (doc: Documentary, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent triggering the card click
+    e.stopPropagation();
     setSelectedCommentItem(doc);
     setCommentsModalOpen(true);
   };
@@ -298,7 +294,7 @@ export default function DocumentariesPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-green-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header - EXACTLY as you had it */}
+        {/* Header */}
         <div className="text-center mb-12">
           <div className="flex justify-center mb-6">
             <div className="w-20 h-20 bg-gradient-to-r from-green-600 to-blue-600 rounded-2xl flex items-center justify-center shadow-2xl">
@@ -314,7 +310,7 @@ export default function DocumentariesPage() {
           </p>
         </div>
 
-        {/* Stats Section - Now with 5 cards horizontal */}
+        {/* Stats Section */}
         <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
           <StatCard
             icon={Film}
@@ -322,7 +318,6 @@ export default function DocumentariesPage() {
             value={stats.totalDocumentaries.toString()}
             color="bg-gradient-to-r from-green-500 to-emerald-500"
           />
-        
           <StatCard
             icon={MapPin}
             label="Locations"
@@ -335,10 +330,9 @@ export default function DocumentariesPage() {
             value={stats.totalHours.toString()}
             color="bg-gradient-to-r from-orange-500 to-red-500"
           />
-         
         </div>
 
-        {/* Search & Filters - EXACTLY as you had it */}
+        {/* Search & Filters */}
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-8">
           <div className="flex flex-col lg:flex-row gap-6">
             <div className="flex-1 relative">
@@ -354,13 +348,12 @@ export default function DocumentariesPage() {
               />
             </div>
 
-            {/* Filters */}
             <div className="flex flex-wrap gap-4 items-center">
               <div className="relative">
                 <select
                   value={selectedLocation}
                   onChange={(e) => setSelectedLocation(e.target.value)}
-                  className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
+                  className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-green-500"
                 >
                   {locations.map((location: string) => (
                     <option key={location} value={location}>
@@ -370,37 +363,33 @@ export default function DocumentariesPage() {
                     </option>
                   ))}
                 </select>
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <ChevronDown className="h-4 w-4 text-gray-400" />
-                </div>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
 
               <div className="relative">
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
+                  className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-green-500"
                 >
                   <option value="newest">Newest First</option>
                   <option value="oldest">Oldest First</option>
                   <option value="views">Most Views</option>
                   <option value="title">Title A-Z</option>
                 </select>
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <ChevronDown className="h-4 w-4 text-gray-400" />
-                </div>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
 
               <div className="flex bg-gray-100 rounded-xl p-1">
                 <button
                   onClick={() => setViewMode("grid")}
-                  className={`p-2 rounded-lg transition-all duration-200 ${viewMode === "grid" ? "bg-white shadow-sm text-green-600" : "text-gray-500 hover:text-gray-700"}`}
+                  className={`p-2 rounded-lg transition-all ${viewMode === "grid" ? "bg-white shadow-sm text-green-600" : "text-gray-500"}`}
                 >
                   <Grid className="w-5 h-5" />
                 </button>
                 <button
                   onClick={() => setViewMode("list")}
-                  className={`p-2 rounded-lg transition-all duration-200 ${viewMode === "list" ? "bg-white shadow-sm text-green-600" : "text-gray-500 hover:text-gray-700"}`}
+                  className={`p-2 rounded-lg transition-all ${viewMode === "list" ? "bg-white shadow-sm text-green-600" : "text-gray-500"}`}
                 >
                   <List className="w-5 h-5" />
                 </button>
@@ -409,7 +398,7 @@ export default function DocumentariesPage() {
           </div>
         </div>
 
-        {/* Documentaries Grid - EXACTLY as you had it, but with likes/comments */}
+        {/* Documentaries Grid */}
         {sortedDocs.length === 0 ? (
           <div className="text-center py-16">
             <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -424,11 +413,11 @@ export default function DocumentariesPage() {
           </div>
         ) : (
           <div
-            className={`${
+            className={
               viewMode === "grid"
                 ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
                 : "space-y-6"
-            }`}
+            }
           >
             {sortedDocs.map((doc) => (
               <div
@@ -440,33 +429,33 @@ export default function DocumentariesPage() {
                 onMouseLeave={() => setShowActions(null)}
                 onClick={() => handleDocClick(doc)}
               >
-                {/* Thumbnail with Play Button */}
+                {/* Thumbnail */}
                 <div
-                  className={`relative overflow-hidden ${
-                    viewMode === "list" ? "w-48 flex-shrink-0" : "h-48"
-                  }`}
+                  className={`relative overflow-hidden ${viewMode === "list" ? "w-48 flex-shrink-0" : "h-48"}`}
                 >
                   <div className="relative w-full h-full">
-                    <Image
-                      src={doc.thumbnail}
+                    <ClientImage
+                      src={getValidImageUrl(doc.thumbnail)}
                       alt={doc.title}
                       fill
                       className="object-cover transition-transform duration-300 group-hover:scale-105"
+                      sizes={
+                        viewMode === "list"
+                          ? "192px"
+                          : "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
+                      }
                     />
                   </div>
 
-                  {/* View Count Badge */}
                   <div className="absolute bottom-3 right-3 bg-black/75 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
                     <Eye className="w-3 h-3" />
                     {doc.views?.toLocaleString() || 0}
                   </div>
 
-                  {/* Duration Badge */}
                   <div className="absolute bottom-3 left-3 bg-black/75 text-white text-xs px-2 py-1 rounded-full">
                     {doc.duration}
                   </div>
 
-                  {/* Location Badge */}
                   <div className="absolute top-3 left-3">
                     <span className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg flex items-center gap-1">
                       <MapPin className="w-3 h-3" />
@@ -474,7 +463,6 @@ export default function DocumentariesPage() {
                     </span>
                   </div>
 
-                  {/* Featured/New Badges */}
                   <div className="absolute top-3 right-3 space-y-2">
                     {doc.is_featured && (
                       <span className="bg-yellow-400 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
@@ -488,33 +476,23 @@ export default function DocumentariesPage() {
                     )}
                   </div>
 
-                  {/* Action Buttons */}
                   <div
-                    className={`absolute top-3 right-3 transition-all duration-300 ${
-                      showActions === doc.id ? "opacity-100" : "opacity-0"
-                    } space-y-2`}
+                    className={`absolute top-3 right-3 transition-all duration-300 ${showActions === doc.id ? "opacity-100" : "opacity-0"} space-y-2`}
                   >
                     <button
                       className="w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Bookmark functionality
-                      }}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <Bookmark className="w-4 h-4 text-gray-600" />
                     </button>
                     <button
                       className="w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Share functionality
-                      }}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <Share2 className="w-4 h-4 text-gray-600" />
                     </button>
                   </div>
 
-                  {/* Play Button Overlay */}
                   <div
                     className={`absolute inset-0 bg-black/40 flex items-center justify-center transition-all duration-300 ${
                       showActions === doc.id
@@ -553,29 +531,28 @@ export default function DocumentariesPage() {
                         </div>
                       </div>
 
-                      {/* Stats row with views, likes, and comments */}
                       <div className="flex items-center gap-3 text-sm text-gray-500">
                         <div className="flex items-center gap-1">
                           <Eye className="w-4 h-4" />
                           <span>{doc.views?.toLocaleString() || 0}</span>
                         </div>
-                        
-                        {/* NEW: Like Button */}
-                        <CardLikeButton 
+
+                        <CardLikeButton
                           contentId={doc.id}
                           contentType="documentaries"
                           initialCount={doc.like_count || 0}
                           onLikeChange={(newCount) => {
-                            setDocumentaries(prevDocs => 
-                              prevDocs.map(d => 
-                                d.id === doc.id ? { ...d, like_count: newCount } : d
-                              )
+                            setDocumentaries((prevDocs) =>
+                              prevDocs.map((d) =>
+                                d.id === doc.id
+                                  ? { ...d, like_count: newCount }
+                                  : d,
+                              ),
                             );
                           }}
                         />
-                        
-                        {/* NEW: Comment Button */}
-                        <button 
+
+                        <button
                           onClick={(e) => handleOpenComments(doc, e)}
                           className="flex items-center gap-1 hover:text-green-600 transition-colors"
                         >
@@ -617,7 +594,6 @@ export default function DocumentariesPage() {
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
               <div className="flex flex-col lg:flex-row">
-                {/* Video Player */}
                 <div className="lg:w-2/3 p-6">
                   <div className="aspect-video bg-black rounded-xl overflow-hidden mb-6">
                     <iframe
@@ -629,10 +605,9 @@ export default function DocumentariesPage() {
                   </div>
 
                   <div className="flex items-center gap-4 mb-4">
-                    {/* Cover Image in Modal */}
                     <div className="w-24 h-32 relative rounded-lg overflow-hidden flex-shrink-0">
-                      <Image
-                        src={selectedDoc.thumbnail}
+                      <ClientImage
+                        src={getValidImageUrl(selectedDoc.thumbnail)}
                         alt={selectedDoc.title}
                         fill
                         className="object-cover"
@@ -697,7 +672,6 @@ export default function DocumentariesPage() {
                   </div>
                 </div>
 
-                {/* Documentary Details Sidebar */}
                 <div className="lg:w-1/3 p-6 border-l border-gray-200">
                   <div className="flex justify-between items-start mb-6">
                     <h3 className="text-xl font-bold text-gray-900">
@@ -771,14 +745,13 @@ export default function DocumentariesPage() {
           </div>
         )}
 
-        {/* NEW: Comments Modal */}
+        {/* Comments Modal */}
         {commentsModalOpen && selectedCommentItem && (
           <ContentCommentsModal
             isOpen={commentsModalOpen}
             onClose={() => {
               setCommentsModalOpen(false);
               setSelectedCommentItem(null);
-              // Refresh comment counts when modal closes
               fetchDocumentaries();
             }}
             contentId={selectedCommentItem.id}

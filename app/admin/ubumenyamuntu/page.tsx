@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import Image from "next/image";
+import ClientImage from "@/app/componets/ClientImage";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { FaBullseye, FaBolt, FaShieldHalved } from "react-icons/fa6";
 import {
   FaPlus,
@@ -28,6 +27,9 @@ import {
   FaHeart,
   FaUsers,
   FaChartLine,
+  FaHome,
+  FaComment,
+  FaThumbsUp,
 } from "react-icons/fa";
 
 interface PsychologyItem {
@@ -61,10 +63,32 @@ interface PsychologyItem {
   rating: number;
   therapy_type: string | null;
   pdf_url: string | null;
+  comment_count?: number;
+  likes_count?: number;
+}
+
+// Helper function for Vercel image paths
+function getValidImageUrl(imageUrl: string | null | undefined): string {
+  if (!imageUrl) {
+    return "https://placehold.co/800x600/e0e0e0/999?text=No+Image";
+  }
+
+  if (imageUrl.startsWith("http")) {
+    return imageUrl;
+  }
+
+  if (imageUrl.startsWith("/images/")) {
+    return imageUrl.replace("/images/", "/uploads/");
+  }
+
+  if (imageUrl.startsWith("/uploads/")) {
+    return imageUrl;
+  }
+
+  return imageUrl;
 }
 
 export default function PsychologyAdminPage() {
-  const pathname = usePathname();
   const [items, setItems] = useState<PsychologyItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -99,15 +123,15 @@ export default function PsychologyAdminPage() {
   const coverInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
-  // Stats
   const [stats, setStats] = useState({
     totalBooks: 0,
     totalDocumentaries: 0,
     totalApproaches: 0,
     totalExperts: 0,
+    totalLikes: 0,
+    totalComments: 0,
   });
 
-  // Filters and search
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"all" | "book" | "documentary">(
     "all",
@@ -125,17 +149,54 @@ export default function PsychologyAdminPage() {
 
   const fetchItems = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("psychology_items")
-      .select("*")
-      .order("created_at", { ascending: false });
+    try {
+      const [itemsResult, commentsResult, likesResult] = await Promise.all([
+        supabase
+          .from("psychology_items")
+          .select("*")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("content_comments")
+          .select("content_id")
+          .eq("content_type", "psychology"),
+        supabase
+          .from("content_likes")
+          .select("content_id")
+          .eq("content_type", "psychology"),
+      ]);
 
-    if (error) {
+      if (itemsResult.error) throw itemsResult.error;
+
+      const commentMap = new Map();
+      if (commentsResult.data) {
+        commentsResult.data.forEach((item: any) => {
+          commentMap.set(
+            item.content_id,
+            (commentMap.get(item.content_id) || 0) + 1,
+          );
+        });
+      }
+
+      const likeMap = new Map();
+      if (likesResult.data) {
+        likesResult.data.forEach((item: any) => {
+          likeMap.set(item.content_id, (likeMap.get(item.content_id) || 0) + 1);
+        });
+      }
+
+      const itemsWithCounts = (itemsResult.data || []).map((item) => ({
+        ...item,
+        comment_count: commentMap.get(item.id) || 0,
+        likes_count: likeMap.get(item.id) || 0,
+      }));
+
+      setItems(itemsWithCounts);
+    } catch (error) {
       console.error("Error fetching psychology items:", error);
-    } else {
-      setItems(data || []);
+      alert("Failed to load psychology items");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const calculateStats = () => {
@@ -145,12 +206,19 @@ export default function PsychologyAdminPage() {
     const experts = new Set(
       items.map((i) => i.author || i.narrator).filter(Boolean),
     ).size;
+    const totalLikes = items.reduce((acc, i) => acc + (i.likes_count || 0), 0);
+    const totalComments = items.reduce(
+      (acc, i) => acc + (i.comment_count || 0),
+      0,
+    );
 
     setStats({
       totalBooks: books,
       totalDocumentaries: docs,
       totalApproaches: approaches,
       totalExperts: experts,
+      totalLikes,
+      totalComments,
     });
   };
 
@@ -163,7 +231,6 @@ export default function PsychologyAdminPage() {
       e.target.type === "checkbox"
         ? (e.target as HTMLInputElement).checked
         : e.target.value;
-
     setFormData({ ...formData, [e.target.name]: value });
   };
 
@@ -172,7 +239,6 @@ export default function PsychologyAdminPage() {
     setFormData({ ...formData, [e.target.name]: value });
   };
 
-  // Cover image upload
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -196,7 +262,6 @@ export default function PsychologyAdminPage() {
     setUploadingCover(true);
     const uploadFormData = new FormData();
     uploadFormData.append("file", file);
-    uploadFormData.append("bucket", "psychology_covers");
 
     try {
       const response = await fetch("/api/upload", {
@@ -204,9 +269,20 @@ export default function PsychologyAdminPage() {
         body: uploadFormData,
       });
 
-      if (!response.ok) throw new Error("Upload failed");
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        throw new Error(`Server returned: ${text.substring(0, 100)}`);
+      }
+
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Upload failed");
+      }
+
       setFormData((prev) => ({ ...prev, cover_image: data.url }));
+      alert("Image uploaded successfully!");
     } catch (error: any) {
       console.error("Upload error:", error);
       alert("Failed to upload image: " + error.message);
@@ -217,7 +293,6 @@ export default function PsychologyAdminPage() {
     }
   };
 
-  // PDF upload
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -236,7 +311,6 @@ export default function PsychologyAdminPage() {
     setUploadingPdf(true);
     const uploadFormData = new FormData();
     uploadFormData.append("file", file);
-    uploadFormData.append("bucket", "psychology_pdfs");
 
     try {
       const response = await fetch("/api/upload", {
@@ -244,9 +318,20 @@ export default function PsychologyAdminPage() {
         body: uploadFormData,
       });
 
-      if (!response.ok) throw new Error("Upload failed");
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        throw new Error(`Server returned: ${text.substring(0, 100)}`);
+      }
+
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Upload failed");
+      }
+
       setFormData((prev) => ({ ...prev, pdf_url: data.url }));
+      alert("PDF uploaded successfully!");
     } catch (error: any) {
       console.error("Upload error:", error);
       alert("Failed to upload PDF: " + error.message);
@@ -268,11 +353,13 @@ export default function PsychologyAdminPage() {
           .update(formData)
           .eq("id", editingItem.id);
         if (error) throw error;
+        alert("Item updated successfully!");
       } else {
         const { error } = await supabase
           .from("psychology_items")
           .insert([formData]);
         if (error) throw error;
+        alert("Item created successfully!");
       }
 
       resetForm();
@@ -288,7 +375,7 @@ export default function PsychologyAdminPage() {
   const handleEdit = (item: PsychologyItem) => {
     setEditingItem(item);
     setFormData(item);
-    setPreviewCover(item.cover_image);
+    setPreviewCover(getValidImageUrl(item.cover_image));
     setSelectedPdfName(item.pdf_url ? "PDF uploaded" : null);
   };
 
@@ -304,6 +391,7 @@ export default function PsychologyAdminPage() {
       console.error("Error deleting item:", error);
       alert("Error deleting item");
     } else {
+      alert("Item deleted successfully!");
       fetchItems();
     }
   };
@@ -353,12 +441,10 @@ export default function PsychologyAdminPage() {
     if (pdfInputRef.current) pdfInputRef.current.value = "";
   };
 
-  // Filter items for display
   const filteredItems = items.filter((item) => {
     const matchesSearch =
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.author?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      false ||
       item.narrator?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       false;
 
@@ -397,38 +483,18 @@ export default function PsychologyAdminPage() {
     "Developmental",
   ];
 
-  const navigationItems = [
-    { name: "Articles", href: "/admin", icon: "📄" },
-    { name: "Header Cards", href: "/admin/header-cards", icon: "🎯" },
-    { name: "Cards", href: "/admin/cards", icon: "📊" },
-    { name: "History", href: "/admin/history", icon: "📚" },
-    { name: "Science", href: "/admin/science", icon: "🔬" },
-    { name: "Books", href: "/admin/books", icon: "📖" },
-    { name: "Ubuzima", href: "/admin/ubuzima", icon: "❤️" },
-    { name: "Ubumenyamuntu", href: "/admin/ubumenyamuntu", icon: "🧠" },
-  ];
-
   const getApproachIcon = (approach: string) => {
-    switch (approach) {
-      case "Cognitive":
-        return <FaBrain className="w-3 h-3" />;
-      case "Behavioral":
-        return <FaBullseye className="w-3 h-3" />;
-      case "Psychoanalytic":
-        return <FaHeart className="w-3 h-3" />;
-      case "Humanistic":
-        return <FaUsers className="w-3 h-3" />;
-      case "Evolutionary":
-        return <FaChartLine className="w-3 h-3" />;
-      case "Social":
-        return <FaUsers className="w-3 h-3" />;
-      case "Clinical":
-        return <FaHeart className="w-3 h-3" />;
-      case "Developmental":
-        return <FaChartLine className="w-3 h-3" />;
-      default:
-        return <FaBrain className="w-3 h-3" />;
-    }
+    const icons: Record<string, React.ReactNode> = {
+      Cognitive: <FaBrain className="w-3 h-3" />,
+      Behavioral: <FaBullseye className="w-3 h-3" />,
+      Psychoanalytic: <FaHeart className="w-3 h-3" />,
+      Humanistic: <FaUsers className="w-3 h-3" />,
+      Evolutionary: <FaChartLine className="w-3 h-3" />,
+      Social: <FaUsers className="w-3 h-3" />,
+      Clinical: <FaHeart className="w-3 h-3" />,
+      Developmental: <FaChartLine className="w-3 h-3" />,
+    };
+    return icons[approach] || <FaBrain className="w-3 h-3" />;
   };
 
   return (
@@ -438,11 +504,9 @@ export default function PsychologyAdminPage() {
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <div className="flex-shrink-0 flex items-center">
-                <span className="text-xl font-bold text-gray-800">
-                  Admin Dashboard
-                </span>
-              </div>
+              <span className="text-xl font-bold text-gray-800">
+                Admin Dashboard
+              </span>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-500">Welcome, Admin</span>
@@ -455,93 +519,82 @@ export default function PsychologyAdminPage() {
       </nav>
 
       <div className="flex pt-16">
-        {/* Main Content */}
         <main className="flex-1 ml-64 p-8">
           <div className="max-w-7xl mx-auto">
             {/* Breadcrumb */}
-         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-            <nav className="mt-10 text-sm text-gray-600 flex items-center gap-2">
-              <Link
-                href="/admin"
-                className="hover:text-purple-600 transition-colors"
-              >
-                Dashboard
-              </Link>
-              <span>/</span>
-              <span className="text-gray-900 font-medium">
-                Ubumenyamuntu
-              </span>
-            </nav>
-               </div>
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-              <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-lg p-6 text-white">
+            <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+              <nav className="mt-10 text-sm text-gray-600 flex items-center gap-2">
+                <Link
+                  href="/admin"
+                  className="hover:text-orange-600 transition-colors"
+                >
+                  Dashboard
+                </Link>
+                <span>/</span>
+                <span className="text-gray-900 font-medium">Ubumenyamuntu</span>
+              </nav>
+            </div>
+            {/* Stats Cards - 6 cards */}
+            <div className="grid grid-cols-4 md:grid-cols-6 gap-4 mb-8">
+              <div className="bg-purple-50 rounded-lg border border-purple-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-purple-100 text-sm font-medium">
-                      Psychology Texts
+                    <p className="text-xs text-purple-600 uppercase font-medium">
+                      Books
                     </p>
-                    <p className="text-3xl font-bold mt-1">
+                    <p className="text-2xl font-bold text-purple-700">
                       {stats.totalBooks}
                     </p>
                   </div>
-                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur">
-                    <FaBook className="w-6 h-6 text-white" />
-                  </div>
+                  <FaBook className="w-5 h-5 text-purple-400" />
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-pink-500 to-rose-600 rounded-xl shadow-lg p-6 text-white">
+              <div className="bg-pink-50 rounded-lg border border-pink-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-pink-100 text-sm font-medium">
-                      Psychological Studies
+                    <p className="text-xs text-pink-600 uppercase font-medium">
+                      Documentaries
                     </p>
-                    <p className="text-3xl font-bold mt-1">
+                    <p className="text-2xl font-bold text-pink-700">
                       {stats.totalDocumentaries}
                     </p>
                   </div>
-                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur">
-                    <FaFilm className="w-6 h-6 text-white" />
-                  </div>
+                  <FaFilm className="w-5 h-5 text-pink-400" />
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl shadow-lg p-6 text-white">
+              <div className="bg-amber-50 rounded-lg border border-amber-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-blue-100 text-sm font-medium">
-                      Psychological Approaches
+                    <p className="text-xs text-amber-600 uppercase font-medium">
+                      Likes
                     </p>
-                    <p className="text-3xl font-bold mt-1">
-                      {stats.totalApproaches}
+                    <p className="text-2xl font-bold text-amber-700">
+                      {stats.totalLikes.toLocaleString()}
                     </p>
                   </div>
-                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur">
-                    <FaBrain className="w-6 h-6 text-white" />
-                  </div>
+                  <FaThumbsUp className="w-5 h-5 text-amber-400" />
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg p-6 text-white">
+              <div className="bg-indigo-50 rounded-lg border border-indigo-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-green-100 text-sm font-medium">
-                      Pioneering Psychologists
+                    <p className="text-xs text-indigo-600 uppercase font-medium">
+                      Comments
                     </p>
-                    <p className="text-3xl font-bold mt-1">
-                      {stats.totalExperts}
+                    <p className="text-2xl font-bold text-indigo-700">
+                      {stats.totalComments.toLocaleString()}
                     </p>
                   </div>
-                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur">
-                    <FaUser className="w-6 h-6 text-white" />
-                  </div>
+                  <FaComment className="w-5 h-5 text-indigo-400" />
                 </div>
               </div>
             </div>
 
             {/* Search and Filters */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 mb-8">
+            <div className="bg-white rounded-lg border border-gray-200 p-4 mb-8">
               <div className="flex flex-col md:flex-row gap-4">
                 <div className="flex-1 relative">
                   <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -550,7 +603,7 @@ export default function PsychologyAdminPage() {
                     placeholder="Search by title, author, or narrator..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
                   />
                 </div>
 
@@ -558,7 +611,7 @@ export default function PsychologyAdminPage() {
                   <select
                     value={filterType}
                     onChange={(e) => setFilterType(e.target.value as any)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-purple-500"
                   >
                     <option value="all">All Types</option>
                     <option value="book">Books Only</option>
@@ -568,7 +621,7 @@ export default function PsychologyAdminPage() {
                   <select
                     value={filterApproach}
                     onChange={(e) => setFilterApproach(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-purple-500"
                   >
                     <option value="all">All Approaches</option>
                     {approaches.map((a) => (
@@ -592,7 +645,7 @@ export default function PsychologyAdminPage() {
                         val === "all" ? null : val === "featured",
                       );
                     }}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-purple-500"
                   >
                     <option value="all">All Items</option>
                     <option value="featured">Featured Only</option>
@@ -603,9 +656,9 @@ export default function PsychologyAdminPage() {
             </div>
 
             {/* Form Card */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden mb-8">
-              <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
-                <h2 className="font-semibold text-gray-700 flex items-center gap-2">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-8">
+              <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+                <h2 className="font-medium text-gray-700 flex items-center gap-2">
                   {editingItem ? (
                     <>
                       <FaEdit className="text-blue-500" /> Edit Psychology Item
@@ -633,7 +686,6 @@ export default function PsychologyAdminPage() {
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Title */}
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Title <span className="text-red-500">*</span>
@@ -643,11 +695,10 @@ export default function PsychologyAdminPage() {
                       value={formData.title}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500"
                     />
                   </div>
 
-                  {/* Type Selection */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Type
@@ -656,14 +707,13 @@ export default function PsychologyAdminPage() {
                       name="type"
                       value={formData.type}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500"
                     >
                       <option value="book">Book</option>
                       <option value="documentary">Documentary</option>
                     </select>
                   </div>
 
-                  {/* Author / Narrator */}
                   {formData.type === "book" ? (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -674,7 +724,7 @@ export default function PsychologyAdminPage() {
                         value={formData.author || ""}
                         onChange={handleChange}
                         required={formData.type === "book"}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500"
                       />
                     </div>
                   ) : (
@@ -687,12 +737,11 @@ export default function PsychologyAdminPage() {
                         value={formData.narrator || ""}
                         onChange={handleChange}
                         required={formData.type === "documentary"}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500"
                       />
                     </div>
                   )}
 
-                  {/* Published Date */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Published Date <span className="text-red-500">*</span>
@@ -703,11 +752,10 @@ export default function PsychologyAdminPage() {
                       value={formData.published_date}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500"
                     />
                   </div>
 
-                  {/* Category */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Category <span className="text-red-500">*</span>
@@ -717,7 +765,7 @@ export default function PsychologyAdminPage() {
                       value={formData.category}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500"
                     >
                       {categories.map((c) => (
                         <option key={c} value={c}>
@@ -727,7 +775,6 @@ export default function PsychologyAdminPage() {
                     </select>
                   </div>
 
-                  {/* Approach */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Approach <span className="text-red-500">*</span>
@@ -737,7 +784,7 @@ export default function PsychologyAdminPage() {
                       value={formData.approach}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500"
                     >
                       {approaches.map((a) => (
                         <option key={a} value={a}>
@@ -747,7 +794,6 @@ export default function PsychologyAdminPage() {
                     </select>
                   </div>
 
-                  {/* Language */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Language
@@ -756,11 +802,10 @@ export default function PsychologyAdminPage() {
                       name="language"
                       value={formData.language}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500"
                     />
                   </div>
 
-                  {/* Therapy Type */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Therapy Type
@@ -770,11 +815,10 @@ export default function PsychologyAdminPage() {
                       value={formData.therapy_type || ""}
                       onChange={handleChange}
                       placeholder="e.g., CBT, Psychoanalysis, etc."
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500"
                     />
                   </div>
 
-                  {/* Book-specific fields */}
                   {formData.type === "book" && (
                     <>
                       <div>
@@ -786,7 +830,7 @@ export default function PsychologyAdminPage() {
                           name="pages"
                           value={formData.pages || ""}
                           onChange={handleNumberChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500"
                         />
                       </div>
 
@@ -798,7 +842,7 @@ export default function PsychologyAdminPage() {
                           name="isbn"
                           value={formData.isbn || ""}
                           onChange={handleChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500"
                         />
                       </div>
 
@@ -810,25 +854,24 @@ export default function PsychologyAdminPage() {
                           name="publisher"
                           value={formData.publisher || ""}
                           onChange={handleChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500"
                         />
                       </div>
                     </>
                   )}
 
-                  {/* Documentary-specific fields */}
                   {formData.type === "documentary" && (
                     <>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Duration (e.g., 2h 30m)
+                          Duration
                         </label>
                         <input
                           name="duration"
                           value={formData.duration || ""}
                           onChange={handleChange}
                           placeholder="2h 30m"
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500"
                         />
                       </div>
 
@@ -841,43 +884,12 @@ export default function PsychologyAdminPage() {
                           value={formData.youtube_url || ""}
                           onChange={handleChange}
                           placeholder="https://youtube.com/watch?v=..."
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500"
                         />
                       </div>
                     </>
                   )}
 
-                  {/* Rating */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Rating (0-5)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="5"
-                      name="rating"
-                      value={formData.rating}
-                      onChange={handleNumberChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-
-                  {/* Views (read-only) */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Views
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.views}
-                      disabled
-                      className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-500"
-                    />
-                  </div>
-
-                  {/* Checkboxes */}
                   <div className="flex items-center gap-6 flex-wrap">
                     <label className="flex items-center gap-2">
                       <input
@@ -907,7 +919,6 @@ export default function PsychologyAdminPage() {
                   </div>
                 </div>
 
-                {/* Description */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Description <span className="text-red-500">*</span>
@@ -918,7 +929,7 @@ export default function PsychologyAdminPage() {
                     onChange={handleChange}
                     required
                     rows={4}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-purple-500"
                   />
                 </div>
 
@@ -939,7 +950,7 @@ export default function PsychologyAdminPage() {
                       type="button"
                       onClick={() => coverInputRef.current?.click()}
                       disabled={uploadingCover}
-                      className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 flex items-center gap-2"
+                      className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-100 flex items-center gap-2"
                     >
                       {uploadingCover ? (
                         <>
@@ -958,13 +969,14 @@ export default function PsychologyAdminPage() {
                     )}
                   </div>
 
-                  {/* Cover Preview */}
                   {(previewCover || formData.cover_image) && (
                     <div className="mt-4">
                       <p className="text-xs text-gray-500 mb-2">Preview:</p>
-                      <div className="relative w-40 h-40 rounded-lg border border-gray-300 overflow-hidden bg-gray-100">
-                        <Image
-                          src={previewCover || formData.cover_image}
+                      <div className="relative w-40 h-40 rounded-md border border-gray-300 overflow-hidden bg-gray-100">
+                        <ClientImage
+                          src={getValidImageUrl(
+                            previewCover || formData.cover_image,
+                          )}
                           alt="Preview"
                           fill
                           className="object-cover"
@@ -974,7 +986,7 @@ export default function PsychologyAdminPage() {
                   )}
                 </div>
 
-                {/* PDF Upload (for books) */}
+                {/* PDF Upload */}
                 {formData.type === "book" && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -992,7 +1004,7 @@ export default function PsychologyAdminPage() {
                         type="button"
                         onClick={() => pdfInputRef.current?.click()}
                         disabled={uploadingPdf}
-                        className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100 flex items-center gap-2"
+                        className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-100 flex items-center gap-2"
                       >
                         {uploadingPdf ? (
                           <>
@@ -1025,35 +1037,30 @@ export default function PsychologyAdminPage() {
                   </div>
                 )}
 
-                {/* Form Actions - Enhanced Visibility */}
-                <div className="flex justify-end gap-3 pt-6 border-t border-gray-200 mt-6">
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                   <button
                     type="button"
                     onClick={resetForm}
-                    className="px-6 py-3 border-2 border-gray-300 rounded-lg text-sm font-semibold text-gray-700 bg-white hover:bg-gray-100 hover:border-gray-400 transition-all flex items-center gap-2 shadow-sm"
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                   >
-                    <FaTimes className="w-4 h-4" />
-                    Clear Form
+                    <FaTimes /> Clear
                   </button>
                   <button
                     type="submit"
                     disabled={loading || uploadingCover || uploadingPdf}
-                    className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg text-sm font-semibold hover:from-purple-700 hover:to-indigo-700 disabled:from-purple-300 disabled:to-indigo-300 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-md hover:shadow-lg"
+                    className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 flex items-center gap-2"
                   >
                     {loading ? (
                       <>
-                        <FaSpinner className="animate-spin w-4 h-4" />
-                        {editingItem ? "Updating..." : "Saving..."}
+                        <FaSpinner className="animate-spin" /> Saving...
                       </>
                     ) : editingItem ? (
                       <>
-                        <FaEdit className="w-4 h-4" />
-                        Update Item
+                        <FaEdit /> Update Item
                       </>
                     ) : (
                       <>
-                        <FaPlus className="w-4 h-4" />
-                        Add New Item
+                        <FaPlus /> Add Item
                       </>
                     )}
                   </button>
@@ -1062,32 +1069,27 @@ export default function PsychologyAdminPage() {
             </div>
 
             {/* Psychology Items Table */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-purple-100 rounded-lg">
-                      <FaBrain className="w-4 h-4 text-purple-600" />
-                    </div>
-                    <div>
-                      <h2 className="font-semibold text-gray-800">
-                        Ubumenyamuntu Collection
-                      </h2>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        Manage all psychology books and documentaries
-                      </p>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <FaBrain className="w-5 h-5 text-gray-500" />
+                    <h2 className="font-medium text-gray-800">
+                      Ubumenyamuntu Collection
+                    </h2>
+                    <span className="text-xs text-gray-500">
+                      Manage psychology books and documentaries
+                    </span>
                   </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="px-3 py-1.5 bg-purple-50 rounded-lg border border-purple-100">
+                  <div className="flex items-center gap-2">
+                    <div className="px-3 py-1 bg-purple-50 rounded-md border border-purple-100">
                       <span className="text-xs font-medium text-purple-700">
-                        📚 {stats.totalBooks} Books
+                        {stats.totalBooks} Books
                       </span>
                     </div>
-                    <div className="px-3 py-1.5 bg-pink-50 rounded-lg border border-pink-100">
+                    <div className="px-3 py-1 bg-pink-50 rounded-md border border-pink-100">
                       <span className="text-xs font-medium text-pink-700">
-                        🎬 {stats.totalDocumentaries} Documentaries
+                        {stats.totalDocumentaries} Documentaries
                       </span>
                     </div>
                   </div>
@@ -1095,30 +1097,25 @@ export default function PsychologyAdminPage() {
               </div>
 
               {loading ? (
-                <div className="p-16 text-center">
-                  <div className="relative">
-                    <div className="w-16 h-16 border-4 border-gray-200 rounded-full"></div>
-                    <div className="absolute top-0 left-0 w-16 h-16 border-4 border-purple-500 rounded-full border-t-transparent animate-spin"></div>
+                <div className="p-12 text-center">
+                  <div className="inline-flex flex-col items-center gap-3">
+                    <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
+                    <p className="text-gray-500 text-sm">Loading items...</p>
                   </div>
-                  <p className="text-gray-500 font-medium mt-4">
-                    Loading psychology items...
-                  </p>
                 </div>
               ) : filteredItems.length === 0 ? (
-                <div className="p-16 text-center">
-                  <div className="inline-flex flex-col items-center gap-4 max-w-sm">
-                    <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
-                      <FaBrain className="w-10 h-10 text-gray-400" />
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-800">
+                <div className="p-12 text-center">
+                  <div className="inline-flex flex-col items-center gap-3">
+                    <FaBrain className="w-12 h-12 text-gray-300" />
+                    <h3 className="text-base font-medium text-gray-700">
                       No items found
                     </h3>
-                    <p className="text-gray-500 text-sm">
+                    <p className="text-gray-500 text-sm max-w-sm">
                       {searchQuery ||
                       filterApproach !== "all" ||
                       filterType !== "all"
-                        ? "Try adjusting your filters to see more results"
-                        : "Get started by adding your first psychology item"}
+                        ? "Try adjusting your filters"
+                        : "Add your first psychology item using the form above"}
                     </p>
                     {(searchQuery ||
                       filterApproach !== "all" ||
@@ -1130,9 +1127,9 @@ export default function PsychologyAdminPage() {
                           setFilterType("all");
                           setFilterFeatured(null);
                         }}
-                        className="mt-2 px-4 py-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors text-sm font-medium"
+                        className="mt-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-md text-sm hover:bg-gray-200"
                       >
-                        Clear all filters
+                        Clear filters
                       </button>
                     )}
                   </div>
@@ -1142,34 +1139,32 @@ export default function PsychologyAdminPage() {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-4 text-left">
-                          <input
-                            type="checkbox"
-                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                          />
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Type
                         </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Title & Author
                         </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Category
                         </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Approach
                         </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Views
                         </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                          Rating
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Likes
                         </th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                          Comments
+                        </th>
+
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Featured
                         </th>
-                        <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                           Actions
                         </th>
                       </tr>
@@ -1178,57 +1173,41 @@ export default function PsychologyAdminPage() {
                       {filteredItems.map((item) => (
                         <tr
                           key={item.id}
-                          className="hover:bg-purple-50/30 transition-colors group"
+                          className="hover:bg-gray-50 transition-colors"
                         >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <input
-                              type="checkbox"
-                              className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                            />
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-4 py-3 whitespace-nowrap">
                             <span
-                              className={`px-3 py-1.5 text-xs font-semibold rounded-full inline-flex items-center gap-1.5 ${
+                              className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md ${
                                 item.type === "book"
-                                  ? "bg-purple-100 text-purple-800 border border-purple-200"
-                                  : "bg-pink-100 text-pink-800 border border-pink-200"
+                                  ? "bg-purple-50 text-purple-700"
+                                  : "bg-pink-50 text-pink-700"
                               }`}
                             >
-                              {item.type === "book" ? (
-                                <>
-                                  <FaBook className="w-3 h-3" />
-                                  Book
-                                </>
-                              ) : (
-                                <>
-                                  <FaFilm className="w-3 h-3" />
-                                  Documentary
-                                </>
-                              )}
+                              {item.type === "book" ? "Book" : "Documentary"}
                             </span>
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-4">
-                              <div className="relative w-12 h-12 rounded-lg overflow-hidden shadow-sm ring-2 ring-gray-100 group-hover:ring-purple-200 transition-all">
-                                <Image
-                                  src={item.cover_image}
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="relative w-10 h-10 rounded-md overflow-hidden bg-gray-100 flex-shrink-0">
+                                <ClientImage
+                                  src={getValidImageUrl(item.cover_image)}
                                   alt={item.title}
                                   fill
                                   className="object-cover"
                                 />
                                 {item.is_new && (
-                                  <div className="absolute top-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                                  <div className="absolute top-0 right-0 w-2 h-2 bg-green-500 rounded-full"></div>
                                 )}
                               </div>
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <h3 className="text-sm font-semibold text-gray-900">
+                                  <h3 className="text-sm font-medium text-gray-900">
                                     {item.title.length > 40
                                       ? `${item.title.substring(0, 40)}...`
                                       : item.title}
                                   </h3>
                                   {item.is_featured && (
-                                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[10px] font-bold">
+                                    <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
                                       Seminal
                                     </span>
                                   )}
@@ -1244,67 +1223,61 @@ export default function PsychologyAdminPage() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="px-2 py-1 bg-purple-50 text-purple-700 rounded-md text-xs font-medium border border-purple-100">
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className="px-2 py-1 bg-purple-50 text-purple-700 rounded-md text-xs">
                               {item.category.split(" ")[0]}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-4 py-3 whitespace-nowrap">
                             <span
-                              className={`px-2 py-1 rounded-md text-xs font-medium inline-flex items-center gap-1 ${
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs ${
                                 item.approach === "Cognitive"
-                                  ? "bg-blue-50 text-blue-700 border border-blue-100"
+                                  ? "bg-blue-50 text-blue-700"
                                   : item.approach === "Behavioral"
-                                    ? "bg-green-50 text-green-700 border border-green-100"
+                                    ? "bg-green-50 text-green-700"
                                     : item.approach === "Psychoanalytic"
-                                      ? "bg-purple-50 text-purple-700 border border-purple-100"
+                                      ? "bg-purple-50 text-purple-700"
                                       : item.approach === "Humanistic"
-                                        ? "bg-amber-50 text-amber-700 border border-amber-100"
+                                        ? "bg-amber-50 text-amber-700"
                                         : item.approach === "Evolutionary"
-                                          ? "bg-red-50 text-red-700 border border-red-100"
+                                          ? "bg-red-50 text-red-700"
                                           : item.approach === "Social"
-                                            ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
+                                            ? "bg-indigo-50 text-indigo-700"
                                             : item.approach === "Clinical"
-                                              ? "bg-pink-50 text-pink-700 border border-pink-100"
-                                              : "bg-teal-50 text-teal-700 border border-teal-100"
+                                              ? "bg-pink-50 text-pink-700"
+                                              : "bg-teal-50 text-teal-700"
                               }`}
                             >
-                              {getApproachIcon(item.approach)}
-                              {item.approach}
+                              {getApproachIcon(item.approach)} {item.approach}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
                             {item.views.toLocaleString()}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-1">
-                              <span className="text-sm font-medium text-gray-900 mr-1">
-                                {item.rating?.toFixed(1) || "0.0"}
-                              </span>
-                              <FaStar className="w-4 h-4 text-amber-400" />
-                            </div>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                            {item.likes_count?.toLocaleString() || 0}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                            {item.comment_count?.toLocaleString() || 0}
+                          </td>
+
+                          <td className="px-4 py-3 whitespace-nowrap">
                             <button
                               onClick={() =>
                                 toggleFeatured(item.id!, item.is_featured)
                               }
-                              className={`p-2 rounded-lg transition-all ${
-                                item.is_featured
-                                  ? "text-amber-500 hover:bg-amber-100"
-                                  : "text-gray-300 hover:text-amber-500 hover:bg-amber-50"
-                              }`}
+                              className={`p-1.5 rounded-md transition-colors ${item.is_featured ? "text-amber-500 hover:bg-amber-50" : "text-gray-300 hover:text-amber-500 hover:bg-amber-50"}`}
                               title={
                                 item.is_featured
                                   ? "Remove from featured"
                                   : "Add to featured"
                               }
                             >
-                              <FaStar size={18} />
+                              <FaStar size={14} />
                             </button>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right">
-                            <div className="flex items-center justify-end gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                          <td className="px-4 py-3 whitespace-nowrap text-right">
+                            <div className="flex items-center justify-end gap-1">
                               <button
                                 onClick={() =>
                                   window.open(
@@ -1312,24 +1285,24 @@ export default function PsychologyAdminPage() {
                                     "_blank",
                                   )
                                 }
-                                className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                                title="Preview"
+                                className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+                                title="View"
                               >
-                                <FaEye size={16} />
+                                <FaEye size={14} />
                               </button>
                               <button
                                 onClick={() => handleEdit(item)}
-                                className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all"
+                                className="p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-md transition-colors"
                                 title="Edit"
                               >
-                                <FaEdit size={16} />
+                                <FaEdit size={14} />
                               </button>
                               <button
                                 onClick={() => handleDelete(item.id!)}
-                                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                                 title="Delete"
                               >
-                                <FaTrash size={16} />
+                                <FaTrash size={14} />
                               </button>
                             </div>
                           </td>
@@ -1337,6 +1310,19 @@ export default function PsychologyAdminPage() {
                       ))}
                     </tbody>
                   </table>
+
+                  <div className="px-6 py-3 bg-gray-50 border-t border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-gray-500">
+                        Showing{" "}
+                        <span className="font-medium">
+                          {filteredItems.length}
+                        </span>{" "}
+                        of <span className="font-medium">{items.length}</span>{" "}
+                        items
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

@@ -44,8 +44,10 @@ const SmallCardsSection = () => {
 
       if (data && data.length > 0) {
         // Separate large and small cards based on card_type
-        const largeCards = data.filter(card => card.card_type === "large");
-        const smallCardsData = data.filter(card => card.card_type === "small");
+        const largeCards = data.filter((card) => card.card_type === "large");
+        const smallCardsData = data.filter(
+          (card) => card.card_type === "small",
+        );
 
         // Set the first large card (if any)
         if (largeCards.length > 0) {
@@ -112,7 +114,7 @@ const SmallCardsSection = () => {
                 </Link>
 
                 <p className="text-gray-600 mb-6">{largeCard.description}</p>
-                
+
                 <Link href={`/header-cards/${largeCard.id}`} prefetch={false}>
                   <button className="bg-black text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-800 transition-colors duration-200">
                     {largeCard.button_text || "SOMA ICYEGERANYO"}
@@ -127,9 +129,16 @@ const SmallCardsSection = () => {
         {smallCards.length > 0 && (
           <div className="lg:col-span-2 flex flex-col gap-6">
             {smallCards.map((card) => (
-              <div key={card.id} className="bg-white rounded-2xl overflow-hidden">
+              <div
+                key={card.id}
+                className="bg-white rounded-2xl overflow-hidden"
+              >
                 <div className="flex flex-col sm:flex-row items-start sm:items-center">
-                  <Link href={`/header-cards/${card.id}`} prefetch={false} className="w-full sm:w-[280px]">
+                  <Link
+                    href={`/header-cards/${card.id}`}
+                    prefetch={false}
+                    className="w-full sm:w-[280px]"
+                  >
                     <div className="h-[240px] bg-gray-200 rounded-xl overflow-hidden cursor-pointer hover:opacity-80 transition-opacity">
                       <Image
                         src={getImageUrl(card)}
@@ -152,13 +161,13 @@ const SmallCardsSection = () => {
                     <p className="text-sm text-gray-600 text-justify mb-2">
                       {card.description}
                     </p>
-                    
+
                     <span className="rounded-full bg-gray-200 text-black px-1.5 py-0.5 text-[0.65rem] font-semibold">
                       {card.label}
                     </span>
-                    
+
                     <br />
-                    
+
                     <Link href={`/header-cards/${card.id}`} prefetch={false}>
                       <button className="text-xs mt-3 bg-transparent border border-gray-300 text-gray-700 px-4 py-2 rounded-full hover:bg-gray-50 transition-colors duration-200">
                         {card.button_text || "SOMA BIRAMBUYE"}
