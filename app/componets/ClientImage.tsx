@@ -14,7 +14,8 @@ interface ClientImageProps {
   height?: number;
 }
 
-const DEFAULT_IMAGE = "https://placehold.co/800x600/e0e0e0/999?text=No+Image";
+// Use a reliable CDN for placeholder images
+const DEFAULT_IMAGE = "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=800&h=600&fit=crop";
 
 export default function ClientImage({ 
   src, 
@@ -37,6 +38,10 @@ export default function ClientImage({
     }
   };
 
+  // For Cloudinary URLs, skip Next.js optimization
+  const isCloudinaryUrl = imgSrc?.includes('res.cloudinary.com');
+  const shouldUnoptimize = isCloudinaryUrl || imgSrc === DEFAULT_IMAGE || hasError;
+
   if (fill) {
     return (
       <Image
@@ -47,7 +52,7 @@ export default function ClientImage({
         className={className}
         sizes={sizes}
         onError={handleError}
-        unoptimized={imgSrc === DEFAULT_IMAGE}
+        unoptimized={shouldUnoptimize}
       />
     );
   }
@@ -61,7 +66,7 @@ export default function ClientImage({
       priority={priority}
       className={className}
       onError={handleError}
-      unoptimized={imgSrc === DEFAULT_IMAGE}
+      unoptimized={shouldUnoptimize}
     />
   );
 }
