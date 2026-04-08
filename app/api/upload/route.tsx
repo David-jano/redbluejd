@@ -1,78 +1,54 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { NextRequest, NextResponse } from "next/server";
+import { v2 as cloudinary } from "cloudinary";
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    const file = formData.get('file') as File | null;
-    const bucket = formData.get('bucket') as string || 'uploads';
+    const file = formData.get("file") as File | null;
 
     if (!file) {
-      return NextResponse.json(
-        { error: 'No file uploaded' },
-        { status: 400 }
-      );
-    }
-
-    // Validate file type
-    if (bucket === 'history_covers' && !file.type.startsWith('image/')) {
-      return NextResponse.json(
-        { error: 'File must be an image' },
-        { status: 400 }
-      );
-    }
-
-    if (bucket === 'history_pdfs' && file.type !== 'application/pdf') {
-      return NextResponse.json(
-        { error: 'File must be a PDF' },
-        { status: 400 }
-      );
-    }
-
-    // Validate file size
-    const maxSize = bucket === 'history_pdfs' ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
-    if (file.size > maxSize) {
-      return NextResponse.json(
-        { error: `File too large. Maximum size is ${maxSize / 1024 / 1024}MB.` },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
     // Convert file to buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Create unique filename
-    const ext = path.extname(file.name);
-    const filename = `${uuidv4()}${ext}`;
-    
-    // Ensure uploads directory exists
-    const uploadDir = path.join(process.cwd(), 'public', bucket);
-    await mkdir(uploadDir, { recursive: true });
-
-    // Save file
-    const filepath = path.join(uploadDir, filename);
-    await writeFile(filepath, buffer);
-
-    // Return the public URL
-    const url = `/${bucket}/${filename}`;
-    
-    return NextResponse.json({ 
-      url, 
-      success: true, 
-      filename 
+    // Upload to Cloudinary
+    const result = await new Promise((resolve, reject) => {
+      cloudinary.uploader
+        .upload_stream(
+          {
+            folder: "uploads",
+            resource_type: "auto",
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          },
+        )
+        .end(buffer);
     });
-    
+
+    return NextResponse.json({
+      url: (result as any).secure_url,
+      success: true,
+    });
   } catch (error: any) {
-    console.error('Upload error:', error);
+    console.error("Upload error:", error);
     return NextResponse.json(
-      { error: error.message || 'Upload failed' },
-      { status: 500 }
+      { error: error.message || "Upload failed" },
+      { status: 500 },
     );
   }
 }
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
