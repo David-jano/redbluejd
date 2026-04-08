@@ -28,28 +28,33 @@ interface Props {
 // Default placeholder for missing images
 const DEFAULT_IMAGE = "https://placehold.co/800x600/e0e0e0/999?text=No+Image";
 
-// Helper function for Vercel image paths
 function getValidImageUrl(imageUrl: string | null | undefined): string {
   if (!imageUrl) {
-    return DEFAULT_IMAGE;
+    return "https://placehold.co/800x600/e0e0e0/999?text=No+Image";
   }
 
-  // If it's already a full URL
+  // Handle Cloudinary URLs (add transformation for better loading)
+  if (imageUrl.includes("res.cloudinary.com")) {
+    // Add quality and format optimization
+    if (imageUrl.includes("/upload/")) {
+      return imageUrl.replace("/upload/", "/upload/q_auto,f_auto/");
+    }
+    return imageUrl;
+  }
+
   if (imageUrl.startsWith("http")) {
     return imageUrl;
   }
 
-  // Handle local paths for Vercel
   if (imageUrl.startsWith("/images/")) {
     return imageUrl.replace("/images/", "/uploads/");
   }
 
-  // If it's already an uploads path
   if (imageUrl.startsWith("/uploads/")) {
     return imageUrl;
   }
 
-  return DEFAULT_IMAGE;
+  return imageUrl;
 }
 
 // SEO Metadata generation
@@ -234,7 +239,12 @@ export default async function CardDetailPage({ params }: Props) {
                 className="text-gray-600 hover:text-blue-600 transition-colors"
                 aria-label="Facebook"
               >
-                <img src="/facebook.svg" width={20} height={20} alt="Facebook" />
+                <img
+                  src="/facebook.svg"
+                  width={20}
+                  height={20}
+                  alt="Facebook"
+                />
               </a>
               <a
                 href="https://www.youtube.com/@RedBlueJD"
@@ -270,7 +280,12 @@ export default async function CardDetailPage({ params }: Props) {
                 className="text-gray-600 hover:text-purple-600 transition-colors"
                 aria-label="Instagram"
               >
-                <img src="/instagram.svg" width={20} height={20} alt="Instagram" />
+                <img
+                  src="/instagram.svg"
+                  width={20}
+                  height={20}
+                  alt="Instagram"
+                />
               </a>
             </div>
           </div>
