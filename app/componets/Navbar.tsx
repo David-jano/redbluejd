@@ -326,13 +326,23 @@ export default function Navbar() {
           >
             <FaInfoCircle /> ABO TURIBO
           </Link>
+
           <Link
             href="/video"
             className={mobileLinkClass}
             onClick={handleMobileLinkClick}
           >
-            <FaVideo /> VIDEO
+            <FaVideo /> VIDEWO
           </Link>
+
+          <Link
+            href="/iguriro"
+            className={mobileLinkClass}
+            onClick={handleMobileLinkClick}
+          >
+            <FaShoppingBag /> eGURIRO
+          </Link>
+
           <Link
             href="/ishuri"
             className={mobileLinkClass}
@@ -352,7 +362,7 @@ export default function Navbar() {
             className={mobileLinkClass}
             onClick={handleMobileLinkClick}
           >
-            <FaFlask /> SIYANSE
+            <FaFlask /> SIYANSI
           </Link>
           <Link
             href="/ibitabo"
