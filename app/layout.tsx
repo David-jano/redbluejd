@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+
 import Navbar from "./componets/Navbar";
 import Footer from "./componets/Footer";
 
@@ -17,7 +18,7 @@ const geistMono = Geist_Mono({
 
 // Add metadata including favicon
 export const metadata: Metadata = {
-  title: "Red Blue JD",
+  title: "RedBlue JD",
   description: "Isi y'ibyegeranyo",
   icons: {
     icon: "/logo.png",
@@ -31,7 +32,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
         <Navbar />
         {children}
         <Footer />

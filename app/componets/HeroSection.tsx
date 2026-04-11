@@ -24,11 +24,11 @@ const HeroSection = () => {
         {/* Left Side: Text and Button */}
         <div className="text-center md:text-left md:w-1/2 p-4">
           <p className="text-black bg-amber-400 rounded-full font-semibold mb-2 px-4 w-fit mx-auto md:mx-0">
-            RedBlue Jd
+            RedBlue JD
           </p>
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-[#333] leading-tight mb-4">
-            Murakaza neza Mu isi
-            <br className="hidden sm:inline" /> yo Gucukumbura
+            Murakaza Neza Mu Isi
+            <br className="hidden sm:inline" /> Yo Gucukumbura
           </h1>
           <p className="text-gray-600 mb-6 max-w-md mx-auto md:mx-0">
             Irembo ry'Afurika ku Mashusho y'Ubumenyi n'Ubushakashatsi!

@@ -28,33 +28,28 @@ interface Props {
 // Default placeholder for missing images
 const DEFAULT_IMAGE = "https://placehold.co/800x600/e0e0e0/999?text=No+Image";
 
+// Helper function for Vercel image paths
 function getValidImageUrl(imageUrl: string | null | undefined): string {
   if (!imageUrl) {
-    return "https://placehold.co/800x600/e0e0e0/999?text=No+Image";
+    return DEFAULT_IMAGE;
   }
 
-  // Handle Cloudinary URLs (add transformation for better loading)
-  if (imageUrl.includes("res.cloudinary.com")) {
-    // Add quality and format optimization
-    if (imageUrl.includes("/upload/")) {
-      return imageUrl.replace("/upload/", "/upload/q_auto,f_auto/");
-    }
-    return imageUrl;
-  }
-
+  // If it's already a full URL
   if (imageUrl.startsWith("http")) {
     return imageUrl;
   }
 
+  // Handle local paths for Vercel
   if (imageUrl.startsWith("/images/")) {
     return imageUrl.replace("/images/", "/uploads/");
   }
 
+  // If it's already an uploads path
   if (imageUrl.startsWith("/uploads/")) {
     return imageUrl;
   }
 
-  return imageUrl;
+  return DEFAULT_IMAGE;
 }
 
 // SEO Metadata generation
