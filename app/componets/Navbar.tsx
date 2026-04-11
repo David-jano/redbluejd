@@ -155,7 +155,7 @@ export default function Navbar() {
               <FaInfoCircle /> ABO TURIBO
             </Link>
             <Link href="/video" className={linkClass}>
-              <FaVideo /> VIDEO
+              <FaVideo /> VIDEWO
             </Link>
           </div>
         </div>
