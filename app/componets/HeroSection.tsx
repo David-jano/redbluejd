@@ -40,7 +40,7 @@ const HeroSection = () => {
               href="https://youtube.com/@redbluejd"
               target="_blank"
               rel="noopener noreferrer"
-              className="group bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-8 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center space-x-2 w-full sm:w-auto"
+              className="group bg-black text-white font-semibold py-3 px-8 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center space-x-2 w-full sm:w-auto"
             >
               <span>Dusure</span>
               <span className="transform group-hover:translate-x-1 transition-transform duration-300">
