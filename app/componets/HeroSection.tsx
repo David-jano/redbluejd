@@ -34,53 +34,26 @@ const HeroSection = () => {
             Irembo ry'Afurika ku Mashusho y'Ubumenyi n'Ubushakashatsi!
           </p>
 
-          {/* Phone Button with integrated functionality */}
+          {/* Dusure YouTube Button */}
           <div className="relative inline-block w-full sm:w-auto">
-            <button
-              onMouseEnter={() => setShowNumber(true)}
-              onMouseLeave={() => setShowNumber(false)}
-              onClick={handleCall}
-              className="group bg-black text-white font-semibold py-3 px-8 rounded-lg shadow-lg hover:bg-opacity-90 transition-colors flex items-center justify-center space-x-2 w-full sm:w-auto"
+            <a
+              href="https://youtube.com/@redbluejd"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-8 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center space-x-2 w-full sm:w-auto"
             >
-              <span>Duhamagare</span>
+              <span>Dusure</span>
               <span className="transform group-hover:translate-x-1 transition-transform duration-300">
                 <svg
                   className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
+                  fill="currentColor"
                   viewBox="0 0 24 24"
                   xmlns="http://www.w3.org/2000/svg"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                  ></path>
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
                 </svg>
               </span>
-            </button>
-
-            {/* Tooltip with number and copy option */}
-            {showNumber && (
-              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 w-64 bg-white rounded-lg shadow-xl border border-gray-200 p-3 z-50 animate-in fade-in slide-in-from-bottom-2">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-mono text-sm text-gray-800">
-                    {phoneNumber}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCopy();
-                    }}
-                    className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition-colors"
-                  >
-                    {copied ? "✓ Copied" : "Copy"}
-                  </button>
-                </div>
-                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 rotate-45 w-2 h-2 bg-white border-r border-b border-gray-200"></div>
-              </div>
-            )}
+            </a>
           </div>
         </div>
 
