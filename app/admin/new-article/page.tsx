@@ -90,7 +90,7 @@ export default function AdminDashboard() {
           `
           *,
           replies:replies(count)
-        `
+        `,
         )
         .order("created_at", { ascending: false })
         .limit(10);
@@ -109,7 +109,7 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteComment = async (id: number) => {
-    if (!confirm("Emeza kuvanaho iki gitekerezo?")) return;
+    if (!confirm("Emeza niba Ushaka kuvanaho iyi nkuru?")) return;
 
     try {
       const { error } = await supabase.from("comments").delete().eq("id", id);
@@ -126,7 +126,7 @@ export default function AdminDashboard() {
   const handleChange = (
     e: React.ChangeEvent<
       HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >
+    >,
   ) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
@@ -646,7 +646,8 @@ export default function AdminDashboard() {
                             content: "",
                           });
                           setPreviewImage(null);
-                          if (fileInputRef.current) fileInputRef.current.value = "";
+                          if (fileInputRef.current)
+                            fileInputRef.current.value = "";
                         }}
                         className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                       >
@@ -677,11 +678,15 @@ export default function AdminDashboard() {
                 <h2 className="font-semibold text-gray-700 flex items-center gap-2">
                   <FaEye className="text-blue-500" /> Recent Comments
                 </h2>
-                <span className="text-sm text-gray-500">Total: {commentCount}</span>
+                <span className="text-sm text-gray-500">
+                  Total: {commentCount}
+                </span>
               </div>
 
               {recentComments.length === 0 ? (
-                <div className="p-6 text-center text-gray-500">No comments yet.</div>
+                <div className="p-6 text-center text-gray-500">
+                  No comments yet.
+                </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
@@ -735,7 +740,9 @@ export default function AdminDashboard() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <button
-                              onClick={() => window.open(`/comments/${comment.id}`, '_blank')}
+                              onClick={() =>
+                                window.open(`/comments/${comment.id}`, "_blank")
+                              }
                               className="text-indigo-600 hover:text-indigo-900 mr-3"
                               title="View"
                             >

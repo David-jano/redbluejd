@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 
-// Configure Cloudinary with your credentials
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
+// ✅ Use individual exports instead of config object
+export const dynamic = "force-dynamic";
+export const maxDuration = 60; // 60 seconds for large videos
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,9 +21,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
-    // Validate file size (5MB for images, 50MB for PDFs)
-    const maxSize =
-      bucket === "history_pdfs" ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
+    // Validate based on bucket type
+    let maxSize = 5 * 1024 * 1024; // 5MB default
+    let allowedTypes: string[] = [];
+
+    if (bucket === "videos") {
+      maxSize = 100 * 1024 * 1024; // 100MB for videos
+      allowedTypes = ["video/mp4", "video/webm", "video/quicktime"];
+    } else if (bucket === "thumbnails") {
+      maxSize = 5 * 1024 * 1024; // 5MB for thumbnails
+      allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    } else {
+      allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    }
+
     if (file.size > maxSize) {
       return NextResponse.json(
         { error: `File too large. Max size is ${maxSize / 1024 / 1024}MB` },
@@ -28,17 +42,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate file type
-    if (bucket === "history_pdfs" && file.type !== "application/pdf") {
+    if (allowedTypes.length > 0 && !allowedTypes.includes(file.type)) {
       return NextResponse.json(
-        { error: "File must be a PDF" },
-        { status: 400 },
-      );
-    }
-
-    if (bucket !== "history_pdfs" && !file.type.startsWith("image/")) {
-      return NextResponse.json(
-        { error: "File must be an image" },
+        { error: `Invalid file type. Allowed: ${allowedTypes.join(", ")}` },
         { status: 400 },
       );
     }
@@ -48,13 +54,29 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(bytes);
 
     // Upload to Cloudinary
+    const uploadOptions: any = {
+      folder: bucket,
+      resource_type: bucket === "videos" ? "video" : "image",
+    };
+
+    if (bucket === "videos") {
+      uploadOptions.eager = [
+        { width: 640, height: 360, crop: "fill", format: "mp4" },
+        { width: 1280, height: 720, crop: "fill", format: "mp4" },
+      ];
+      uploadOptions.eager_async = true;
+      uploadOptions.transformation = [
+        { quality: "auto", fetch_format: "auto" },
+      ];
+    } else {
+      uploadOptions.transformation = [
+        { quality: "auto", fetch_format: "auto", crop: "limit" },
+      ];
+    }
+
     const result = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: bucket, // Use the bucket name as folder
-          resource_type: file.type === "application/pdf" ? "raw" : "image",
-          allowed_formats: ["jpg", "jpeg", "png", "webp", "pdf"],
-        },
+        uploadOptions,
         (error, result) => {
           if (error) reject(error);
           else resolve(result);
@@ -67,8 +89,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       url: uploadedFile.secure_url,
+      publicId: uploadedFile.public_id,
+      duration: uploadedFile.duration,
+      format: uploadedFile.format,
+      size: uploadedFile.bytes,
       success: true,
-      filename: uploadedFile.public_id,
     });
   } catch (error: any) {
     console.error("Upload error:", error);
@@ -78,6 +103,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
-export const dynamic = "force-dynamic";
-export const maxDuration = 60;

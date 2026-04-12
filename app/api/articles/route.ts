@@ -1,6 +1,9 @@
 import { supabaseServer } from "@/lib/supabase-server";
 import { NextResponse } from "next/server";
 
+// ============================================
+// POST - Create a new article
+// ============================================
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -51,44 +54,44 @@ export async function POST(request: Request) {
   }
 }
 
+// ============================================
+// GET - Get all articles (list)
+// ============================================
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
+    const limit = searchParams.get("limit");
+    const label = searchParams.get("label");
+    
+    let query = supabaseServer
+      .from("articles")
+      .select("*")
+      .order("created_at", { ascending: false });
+    
+    // Filter by label/category if provided
+    if (label) {
+      query = query.eq("label", label);
+    }
+    
+    // Limit results if provided
+    if (limit) {
+      query = query.limit(parseInt(limit));
+    }
+    
+    const { data, error } = await query;
 
-    let query = supabaseServer.from("articles").select("*");
-
-    if (id) {
-      const { data, error } = await query.eq("id", parseInt(id)).single();
-      
-      if (error) {
-        console.error("Supabase error:", error);
-        return NextResponse.json(
-          { error: error.message },
-          { status: 500 }
-        );
-      }
-      
+    if (error) {
+      console.error("Supabase error:", error);
       return NextResponse.json(
-        { success: true, data },
-        { status: 200 }
-      );
-    } else {
-      const { data, error } = await query.order("created_at", { ascending: false });
-      
-      if (error) {
-        console.error("Supabase error:", error);
-        return NextResponse.json(
-          { error: error.message },
-          { status: 500 }
-        );
-      }
-      
-      return NextResponse.json(
-        { success: true, data },
-        { status: 200 }
+        { error: error.message },
+        { status: 500 }
       );
     }
+    
+    return NextResponse.json(
+      { success: true, data },
+      { status: 200 }
+    );
   } catch (err: any) {
     console.error("API error:", err);
     return NextResponse.json(

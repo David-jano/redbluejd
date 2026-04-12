@@ -23,12 +23,14 @@ import {
   FaFile,
   FaHistory,
   FaFlask,
+  FaChartLine,
   FaBookOpen,
   FaHeart,
   FaBrain,
   FaPalette,
   FaFilm,
   FaComment,
+  FaVideo,
 } from "react-icons/fa";
 
 // Types
@@ -43,7 +45,7 @@ interface Comment {
 }
 
 interface Article {
-  id: number;
+  id: string; // Change from 'number' to 'string'
   title: string;
   author: string;
   label: string;
@@ -293,46 +295,18 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setSuccess(false);
-
-    try {
-      let response;
-      if (editingArticle) {
-        response = await fetch(`/api/articles/${editingArticle.id}`, {
-          method: "PUT",
-          body: JSON.stringify(formData),
-          headers: { "Content-Type": "application/json" },
-        });
-      } else {
-        response = await fetch("/api/articles", {
-          method: "POST",
-          body: JSON.stringify(formData),
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        alert("Error: " + (result.error || "Unknown error"));
-        return;
-      }
-
-      setSuccess(true);
-      resetForm();
-      await Promise.all([fetchArticles(), fetchStats()]);
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (error: any) {
-      alert("Network error: " + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleEditArticle = (article: Article) => {
+    console.log("=== Edit Article ===");
+    console.log("Article object:", article);
+    console.log("Article ID:", article.id);
+    console.log("ID type:", typeof article.id);
+    console.log("ID length:", article.id?.length);
+
+    if (!article.id) {
+      console.error("No ID found!");
+      return;
+    }
+
     setEditingArticle(article);
     setFormData({
       title: article.title,
@@ -345,7 +319,56 @@ export default function AdminDashboard() {
     setPreviewImage(getValidImageUrl(article.image_url));
   };
 
-  const handleDeleteArticle = async (id: number) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setSuccess(false);
+
+    try {
+      let response;
+      if (editingArticle) {
+        console.log("=== Submitting Update ===");
+        console.log("Editing article ID:", editingArticle.id);
+        console.log("Full URL:", `/api/articles/${editingArticle.id}`);
+
+        response = await fetch(`/api/articles/${editingArticle.id}`, {
+          method: "PUT",
+          body: JSON.stringify(formData),
+          headers: { "Content-Type": "application/json" },
+        });
+
+        console.log("Response status:", response.status);
+      } else {
+        response = await fetch("/api/articles", {
+          method: "POST",
+          body: JSON.stringify(formData),
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const result = await response.json();
+      console.log("Response data:", result);
+
+      if (!response.ok) {
+        alert("Error: " + (result.error || "Unknown error"));
+        return;
+      }
+
+      setSuccess(true);
+      resetForm();
+      await Promise.all([fetchArticles(), fetchStats()]);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (error: any) {
+      console.error("Submit error:", error);
+      alert("Network error: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Update handleDeleteArticle parameter type (around line 300)
+  const handleDeleteArticle = async (id: string) => {
+    // Change from number to string
     if (!confirm("Emeza kuvanaho iki gitekerezo?")) return;
 
     try {
@@ -377,6 +400,11 @@ export default function AdminDashboard() {
   };
 
   const navigationItems = [
+    {
+      name: "Analytics",
+      href: "/admin/analytics",
+      icon: <FaChartLine className="text-gray-600" />,
+    },
     {
       name: "Main Article",
       href: "/admin",
@@ -432,6 +460,11 @@ export default function AdminDashboard() {
       href: "/admin/philosophy",
       icon: <FaBible className="text-gray-600" />,
     },
+     {
+      name: "Videos",
+      href: "/admin/videos",
+      icon: <FaVideo className="text-gray-600" />,
+    },
   ];
 
   return (
@@ -461,16 +494,10 @@ export default function AdminDashboard() {
         {/* Sidebar */}
         <aside className="w-64 bg-white border-r border-gray-200 fixed h-[calc(100vh-4rem)] overflow-y-auto">
           <div className="p-4">
-            <div className="mb-6 px-3">
-              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                Management
-              </h2>
-            </div>
-
             {/* Main Content Group */}
-            <div className="mb-4 mt-10">
+            <div className="mb-4 mt-1">
               <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                Core
+                MANAGEMENT
               </h3>
               <nav className="space-y-1">
                 {navigationItems.slice(0, 3).map((item) => (
