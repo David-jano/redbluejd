@@ -3,22 +3,22 @@ import { NextResponse } from "next/server";
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> }, // params is a Promise
 ) {
   try {
-    // Method 1: Try to get from params
-    let articleId = params?.id;
+    const { id } = await params; // Await the params first
 
-    // Method 2: If params is empty, extract from URL
+    let articleId = id;
+
+    // If id is empty, try to extract from URL
     if (!articleId) {
       const url = new URL(request.url);
       const pathParts = url.pathname.split("/");
-      articleId = pathParts[pathParts.length - 1]; // Get the last part of the URL
+      articleId = pathParts[pathParts.length - 1];
     }
 
     console.log("Extracted article ID:", articleId);
     console.log("Full URL:", request.url);
-    console.log("Params object:", params);
 
     if (!articleId || articleId === "undefined" || articleId === "null") {
       return NextResponse.json(
@@ -70,13 +70,15 @@ export async function PUT(
   }
 }
 
-// Also fix the GET method
+// GET method
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> }, // params is a Promise
 ) {
   try {
-    let articleId = params?.id;
+    const { id } = await params; // Await the params first
+
+    let articleId = id;
 
     if (!articleId) {
       const url = new URL(request.url);
@@ -111,13 +113,15 @@ export async function GET(
   }
 }
 
-// Fix the DELETE method as well
+// DELETE method
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> }, // params is a Promise
 ) {
   try {
-    let articleId = params?.id;
+    const { id } = await params; // Await the params first
+
+    let articleId = id;
 
     if (!articleId) {
       const url = new URL(request.url);
