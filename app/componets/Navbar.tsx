@@ -92,12 +92,12 @@ export default function Navbar() {
     "flex items-center gap-2 px-4 py-2 text-black transition duration-300 hover:text-transparent hover:bg-clip-text hover:bg-gradient-to-r hover:from-yellow-400 hover:via-red-500 hover:to-blue-500";
 
   return (
-    <nav className="bg-black text-white shadow-md px-6 py-5 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto flex items-center justify-between relative">
+    <nav className="bg-black text-white shadow-md px-6 py-5 sticky top-0 z-50 overflow-x-clip">
+      <div className="max-w-7xl mx-auto flex items-center justify-between relative w-full">
         {/* Left section */}
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-4 flex-shrink-0">
           {/* Desktop Hamburger Button (Visible on medium and large screens) */}
-          <div className="hidden md:block">
+          <div className="hidden md:block relative">
             <button
               ref={desktopHamburgerRef}
               onClick={() => setIsDesktopDropdownOpen(!isDesktopDropdownOpen)}
@@ -127,10 +127,75 @@ export default function Navbar() {
                 )}
               </svg>
             </button>
+
+            {/* Desktop Dropdown Menu */}
+            {isDesktopDropdownOpen && (
+              <div
+                ref={desktopDropdownRef}
+                className="absolute top-full left-0 mt-2 bg-white py-2 w-56 rounded shadow-lg z-[100]"
+              >
+                <Link
+                  href="/amateka"
+                  className={desktopDropdownLinkClass}
+                  onClick={handleDesktopDropdownLinkClick}
+                >
+                  <FaFolder /> AMATEKA
+                </Link>
+                <Link
+                  href="/siyanse"
+                  className={desktopDropdownLinkClass}
+                  onClick={handleDesktopDropdownLinkClick}
+                >
+                  <FaFlask /> SIYANSI
+                </Link>
+                <Link
+                  href="/ibitabo"
+                  className={desktopDropdownLinkClass}
+                  onClick={handleDesktopDropdownLinkClick}
+                >
+                  <FaBookOpen /> IBITABO
+                </Link>
+                <Link
+                  href="/ubuzima"
+                  className={desktopDropdownLinkClass}
+                  onClick={handleDesktopDropdownLinkClick}
+                >
+                  <FaHeartbeat /> UBUZIMA
+                </Link>
+                <Link
+                  href="/ubumenyamuntu"
+                  className={desktopDropdownLinkClass}
+                  onClick={handleDesktopDropdownLinkClick}
+                >
+                  <FaUserFriends /> UBUMENYA-MUNTU
+                </Link>
+                <Link
+                  href="/ubugeni"
+                  className={desktopDropdownLinkClass}
+                  onClick={handleDesktopDropdownLinkClick}
+                >
+                  <FaPaintBrush /> UBUGENI
+                </Link>
+                <Link
+                  href="/ibyegeranyo"
+                  className={desktopDropdownLinkClass}
+                  onClick={handleDesktopDropdownLinkClick}
+                >
+                  <FaBook /> IBYEGERANYO
+                </Link>
+                <Link
+                  href="/philosoph"
+                  className={desktopDropdownLinkClass}
+                  onClick={handleDesktopDropdownLinkClick}
+                >
+                  <FaBook /> FILOZOFIYA
+                </Link>
+              </div>
+            )}
           </div>
 
           {/* Mobile Logo */}
-          <div className="md:hidden">
+          <div className="md:hidden relative z-50">
             <Link
               href="/"
               className="flex items-center"
@@ -178,10 +243,10 @@ export default function Navbar() {
 
         {/* Right Section for Desktop with smooth transition */}
         <div
-          className={`hidden md:flex items-center space-x-6 transition-all duration-700 ease-in-out ${
+          className={`hidden md:flex items-center space-x-6 transition-all duration-700 ease-in-out flex-shrink-0 ${
             isLinksMoved
-              ? "translate-x-10 opacity-100"
-              : "translate-x-0 opacity-100"
+              ? "md:translate-x-10 opacity-100"
+              : "md:translate-x-0 opacity-100"
           }`}
         >
           <Link href="/iguriro" className={linkClass}>
@@ -195,14 +260,14 @@ export default function Navbar() {
           </Link>
           <Link
             href="/twandikire"
-            className="flex items-center gap-2 bg-amber-600 px-5 py-2 rounded-sm bg-amber-700hover: transition-colors duration-300"
+            className="flex items-center gap-2 bg-amber-600 px-5 py-2 rounded-sm hover:bg-amber-700 transition-colors duration-300"
           >
             <FaEnvelope /> TWANDIKIRE
           </Link>
         </div>
 
         {/* Mobile Hamburger (Visible on mobile only) */}
-        <div className="md:hidden" ref={menuRef}>
+        <div className="md:hidden flex-shrink-0 relative z-50" ref={menuRef}>
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label="Toggle mobile menu"
@@ -241,179 +306,125 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Desktop Dropdown Menu (For medium and large screens) */}
-      {isDesktopDropdownOpen && (
-        <div
-          ref={desktopDropdownRef}
-          className="hidden md:block absolute top-14 left-77 bg-white mt-2 py-2 w-56 rounded shadow-lg z-20"
-        >
-          <Link
-            href="/amateka"
-            className={desktopDropdownLinkClass}
-            onClick={handleDesktopDropdownLinkClick}
-          >
-            <FaFolder /> AMATEKA
-          </Link>
-          <Link
-            href="/siyanse"
-            className={desktopDropdownLinkClass}
-            onClick={handleDesktopDropdownLinkClick}
-          >
-            <FaFlask /> SIYANSI
-          </Link>
-          <Link
-            href="/ibitabo"
-            className={desktopDropdownLinkClass}
-            onClick={handleDesktopDropdownLinkClick}
-          >
-            <FaBookOpen /> IBITABO
-          </Link>
-          <Link
-            href="/ubuzima"
-            className={desktopDropdownLinkClass}
-            onClick={handleDesktopDropdownLinkClick}
-          >
-            <FaHeartbeat /> UBUZIMA
-          </Link>
-          <Link
-            href="/ubumenyamuntu"
-            className={desktopDropdownLinkClass}
-            onClick={handleDesktopDropdownLinkClick}
-          >
-            <FaUserFriends /> UBUMENYA-MUNTU
-          </Link>
-          <Link
-            href="/ubugeni"
-            className={desktopDropdownLinkClass}
-            onClick={handleDesktopDropdownLinkClick}
-          >
-            <FaPaintBrush /> UBUGENI
-          </Link>
-          <Link
-            href="/ibyegeranyo"
-            className={desktopDropdownLinkClass}
-            onClick={handleDesktopDropdownLinkClick}
-          >
-            <FaBook /> IBYEGERANYO
-          </Link>
-          <Link
-            href="/philosoph"
-            className={desktopDropdownLinkClass}
-            onClick={handleDesktopDropdownLinkClick}
-          >
-            <FaBook /> FILOZOFIYA
-          </Link>
-        </div>
-      )}
-
       {/* Mobile Dropdown Menu */}
       {isMobileMenuOpen && (
-        <div
-          ref={mobileMenuRef}
-          className="md:hidden absolute top-full left-0 right-0 bg-black py-2 shadow-lg z-20 max-h-[80vh] overflow-y-auto"
-        >
-          <Link
-            href="/"
-            className={mobileLinkClass}
-            onClick={handleMobileLinkClick}
-          >
-            <FaHome /> AHABANZA
-          </Link>
-          <Link
-            href="/aboturibo"
-            className={mobileLinkClass}
-            onClick={handleMobileLinkClick}
-          >
-            <FaInfoCircle /> ABO TURIBO
-          </Link>
+        <>
+          {/* Backdrop overlay */}
+          <div
+            className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
 
-          <Link
-            href="/video"
-            className={mobileLinkClass}
-            onClick={handleMobileLinkClick}
+          {/* Mobile Menu */}
+          <div
+            ref={mobileMenuRef}
+            className="md:hidden fixed top-[76px] left-0 right-0 bg-black py-4 shadow-xl z-40 max-h-[calc(100vh-76px)] overflow-y-auto"
           >
-            <FaVideo /> VIDEWO
-          </Link>
+            <div className="px-4">
+              <Link
+                href="/"
+                className={mobileLinkClass}
+                onClick={handleMobileLinkClick}
+              >
+                <FaHome /> AHABANZA
+              </Link>
+              <Link
+                href="/aboturibo"
+                className={mobileLinkClass}
+                onClick={handleMobileLinkClick}
+              >
+                <FaInfoCircle /> ABO TURIBO
+              </Link>
 
-          <Link
-            href="/iguriro"
-            className={mobileLinkClass}
-            onClick={handleMobileLinkClick}
-          >
-            <FaShoppingBag /> eGURIRO
-          </Link>
+              <Link
+                href="/video"
+                className={mobileLinkClass}
+                onClick={handleMobileLinkClick}
+              >
+                <FaVideo /> VIDEWO
+              </Link>
 
-          <Link
-            href="/ishuri"
-            className={mobileLinkClass}
-            onClick={handleMobileLinkClick}
-          >
-            <FaSchool /> ISHURI
-          </Link>
-          <Link
-            href="/amateka"
-            className={mobileLinkClass}
-            onClick={handleMobileLinkClick}
-          >
-            <FaFolder /> AMATEKA
-          </Link>
-          <Link
-            href="/siyanse"
-            className={mobileLinkClass}
-            onClick={handleMobileLinkClick}
-          >
-            <FaFlask /> SIYANSI
-          </Link>
-          <Link
-            href="/ibitabo"
-            className={mobileLinkClass}
-            onClick={handleMobileLinkClick}
-          >
-            <FaBookOpen /> IBITABO
-          </Link>
-          <Link
-            href="/ubuzima"
-            className={mobileLinkClass}
-            onClick={handleMobileLinkClick}
-          >
-            <FaHeartbeat /> UBUZIMA
-          </Link>
-          <Link
-            href="/ubumenyamuntu"
-            className={mobileLinkClass}
-            onClick={handleMobileLinkClick}
-          >
-            <FaUserFriends /> UBUMENYA-MUNTU
-          </Link>
-          <Link
-            href="/ubugeni"
-            className={mobileLinkClass}
-            onClick={handleMobileLinkClick}
-          >
-            <FaPaintBrush /> UBUGENI
-          </Link>
-          <Link
-            href="/ibyegeranyo"
-            className={mobileLinkClass}
-            onClick={handleMobileLinkClick}
-          >
-            <FaBook /> IBYEGERANYO
-          </Link>
-          <Link
-            href="/philosoph"
-            className={mobileLinkClass}
-            onClick={handleMobileLinkClick}
-          >
-            <FaBook /> PHILOSOPH
-          </Link>
-          <Link
-            href="/twandikire"
-            className={mobileLinkClass}
-            onClick={handleMobileLinkClick}
-          >
-            <FaEnvelope /> TWANDIKIRE
-          </Link>
-        </div>
+              <Link
+                href="/iguriro"
+                className={mobileLinkClass}
+                onClick={handleMobileLinkClick}
+              >
+                <FaShoppingBag /> eGURIRO
+              </Link>
+
+              <Link
+                href="/ishuri"
+                className={mobileLinkClass}
+                onClick={handleMobileLinkClick}
+              >
+                <FaSchool /> ISHURI
+              </Link>
+              <Link
+                href="/amateka"
+                className={mobileLinkClass}
+                onClick={handleMobileLinkClick}
+              >
+                <FaFolder /> AMATEKA
+              </Link>
+              <Link
+                href="/siyanse"
+                className={mobileLinkClass}
+                onClick={handleMobileLinkClick}
+              >
+                <FaFlask /> SIYANSI
+              </Link>
+              <Link
+                href="/ibitabo"
+                className={mobileLinkClass}
+                onClick={handleMobileLinkClick}
+              >
+                <FaBookOpen /> IBITABO
+              </Link>
+              <Link
+                href="/ubuzima"
+                className={mobileLinkClass}
+                onClick={handleMobileLinkClick}
+              >
+                <FaHeartbeat /> UBUZIMA
+              </Link>
+              <Link
+                href="/ubumenyamuntu"
+                className={mobileLinkClass}
+                onClick={handleMobileLinkClick}
+              >
+                <FaUserFriends /> UBUMENYA-MUNTU
+              </Link>
+              <Link
+                href="/ubugeni"
+                className={mobileLinkClass}
+                onClick={handleMobileLinkClick}
+              >
+                <FaPaintBrush /> UBUGENI
+              </Link>
+              <Link
+                href="/ibyegeranyo"
+                className={mobileLinkClass}
+                onClick={handleMobileLinkClick}
+              >
+                <FaBook /> IBYEGERANYO
+              </Link>
+              <Link
+                href="/philosoph"
+                className={mobileLinkClass}
+                onClick={handleMobileLinkClick}
+              >
+                <FaBook /> PHILOSOPH
+              </Link>
+              <Link
+                href="/twandikire"
+                className={mobileLinkClass}
+                onClick={handleMobileLinkClick}
+              >
+                <FaEnvelope /> TWANDIKIRE
+              </Link>
+            </div>
+          </div>
+        </>
       )}
     </nav>
   );
