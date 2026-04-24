@@ -109,7 +109,7 @@ const Footer = () => {
               <ul className="text-white space-y-2 text-left md:text-left">
                 <li>
                   <a href="./video" className="hover:text-amber-300">
-                    Videos
+                    Videwo
                   </a>
                 </li>
                 <li>

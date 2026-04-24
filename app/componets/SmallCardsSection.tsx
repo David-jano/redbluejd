@@ -89,7 +89,7 @@ const SmallCardsSection = () => {
         {/* Large Card */}
         {largeCard && (
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-2xl overflow-hidden">
+            <div className="bg-white rounded-2xl overflow-hidden h-full flex flex-col">
               <Link href={`/header-cards/${largeCard.id}`} prefetch={false}>
                 <div className="relative h-[280px] bg-gray-200 rounded-2xl overflow-hidden cursor-pointer hover:opacity-80 transition-opacity">
                   <Image
@@ -103,20 +103,22 @@ const SmallCardsSection = () => {
                 </div>
               </Link>
 
-              <div className="p-6">
-                <Link href={`/header-cards/${largeCard.id}`} prefetch={false}>
-                  <h2 className="text-3xl font-bold text-gray-900 mb-4 cursor-pointer hover:text-gray-700 transition-colors">
-                    {largeCard.title}
-                    <span className="rounded-full bg-gray-200 ml-4 text-black px-1.5 py-0.5 text-[0.65rem] font-semibold">
-                      {largeCard.label}
-                    </span>
-                  </h2>
-                </Link>
+              <div className="p-6 flex flex-col flex-1">
+                <div className="flex-1">
+                  <Link href={`/header-cards/${largeCard.id}`} prefetch={false}>
+                    <h2 className="text-3xl font-bold text-gray-900 mb-4 cursor-pointer hover:text-gray-700 transition-colors">
+                      {largeCard.title}
+                      <span className="rounded-full bg-gray-200 ml-4 text-black px-1.5 py-0.5 text-[0.65rem] font-semibold">
+                        {largeCard.label}
+                      </span>
+                    </h2>
+                  </Link>
 
-                <p className="text-gray-600 mb-6">{largeCard.description}</p>
+                  <p className="text-gray-600 mb-6">{largeCard.description}</p>
+                </div>
 
                 <Link href={`/header-cards/${largeCard.id}`} prefetch={false}>
-                  <button className="bg-black text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-800 transition-colors duration-200">
+                  <button className="bg-black text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-800 transition-colors duration-200 w-full sm:w-auto">
                     {largeCard.button_text || "SOMA ICYEGERANYO"}
                   </button>
                 </Link>
@@ -131,48 +133,49 @@ const SmallCardsSection = () => {
             {smallCards.map((card) => (
               <div
                 key={card.id}
-                className="bg-white rounded-2xl overflow-hidden"
+                className="bg-white rounded-2xl overflow-hidden h-full"
               >
-                <div className="flex flex-col sm:flex-row items-start sm:items-center">
+                <div className="flex flex-col sm:flex-row items-stretch">
                   <Link
                     href={`/header-cards/${card.id}`}
                     prefetch={false}
-                    className="w-full sm:w-[280px]"
+                    className="w-full sm:w-[280px] flex-shrink-0"
                   >
-                    <div className="h-[240px] bg-gray-200 rounded-xl overflow-hidden cursor-pointer hover:opacity-80 transition-opacity">
+                    <div className="relative h-[240px] sm:h-full min-h-[200px] bg-gray-200 rounded-xl overflow-hidden cursor-pointer hover:opacity-80 transition-opacity">
                       <Image
                         src={getImageUrl(card)}
                         alt={card.title}
-                        className="object-cover w-full h-full"
-                        width={280}
-                        height={240}
+                        fill
+                        className="object-cover"
                         onError={() => handleImageError(card.id)}
                       />
                     </div>
                   </Link>
 
-                  <div className="p-4 flex-1">
-                    <Link href={`/header-cards/${card.id}`} prefetch={false}>
-                      <h3 className="text-base font-bold text-gray-900 mb-2 leading-tight cursor-pointer hover:text-gray-700 transition-colors">
-                        {card.title}
-                      </h3>
-                    </Link>
+                  <div className="p-4 flex-1 flex flex-col">
+                    <div className="flex-1">
+                      <Link href={`/header-cards/${card.id}`} prefetch={false}>
+                        <h3 className="text-base font-bold text-gray-900 mb-2 leading-tight cursor-pointer hover:text-gray-700 transition-colors">
+                          {card.title}
+                        </h3>
+                      </Link>
 
-                    <p className="text-sm text-gray-600 text-justify mb-2">
-                      {card.description}
-                    </p>
+                      <p className="text-sm text-gray-600 text-justify mb-2 line-clamp-3">
+                        {card.description}
+                      </p>
 
-                    <span className="rounded-full bg-gray-200 text-black px-1.5 py-0.5 text-[0.65rem] font-semibold">
-                      {card.label}
-                    </span>
+                      <span className="inline-block rounded-full bg-gray-200 text-black px-1.5 py-0.5 text-[0.65rem] font-semibold">
+                        {card.label}
+                      </span>
+                    </div>
 
-                    <br />
-
-                    <Link href={`/header-cards/${card.id}`} prefetch={false}>
-                      <button className="text-xs mt-3 bg-transparent border border-gray-300 text-gray-700 px-4 py-2 rounded-full hover:bg-gray-50 transition-colors duration-200">
-                        {card.button_text || "SOMA BIRAMBUYE"}
-                      </button>
-                    </Link>
+                    <div className="mt-3">
+                      <Link href={`/header-cards/${card.id}`} prefetch={false}>
+                        <button className="text-xs bg-transparent border border-gray-300 text-gray-700 px-4 py-2 rounded-full hover:bg-gray-50 transition-colors duration-200">
+                          {card.button_text || "SOMA BIRAMBUYE"}
+                        </button>
+                      </Link>
+                    </div>
                   </div>
                 </div>
               </div>

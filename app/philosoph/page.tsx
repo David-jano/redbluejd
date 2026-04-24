@@ -475,7 +475,7 @@ export default function PhilosophyPage() {
         <div className="text-center mb-12">
           <div className="flex justify-center mb-6">
             <div className="relative">
-              <div className="w-24 h-24 bg-gradient-to-r from-indigo-600 via-purple-600 to-gray-600 rounded-2xl flex items-center justify-center shadow-2xl">
+              <div className="w-24 h-24 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl">
                 <Brain className="w-12 h-12 text-white" />
               </div>
               <div className="absolute -top-2 -right-2 w-10 h-10 bg-gradient-to-r from-amber-500 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
@@ -485,28 +485,27 @@ export default function PhilosophyPage() {
           </div>
           <h1 className="text-4xl font-bold text-black mb-4">Filozofiya</h1>
           <p className="text-lg text-gray-600 max-w-3xl mx-auto">
-            Explore timeless wisdom through foundational texts and profound
-            philosophical documentaries
+           Menya ubwenge butajya busaza binyuze mu bitabo by’ingenzi na filimi by’inyandiko zimbitse.
           </p>
         </div>
 
         {/* Stats Section */}
-        <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           <StatCard
             icon={BookOpen}
-            label="Philosophical Texts"
+            label="Inyandiko za filozofiya"
             value={stats.totalBooks.toString()}
             color="bg-gradient-to-r from-indigo-500 to-purple-500"
           />
           <StatCard
             icon={Brain}
-            label="Philosophical Branches"
+            label="ibyiciro bya filozofiya"
             value={stats.totalBranches.toString()}
             color="bg-gradient-to-r from-blue-500 to-cyan-500"
           />
           <StatCard
             icon={Users}
-            label="Philosophers"
+            label="abafilozofe"
             value={stats.totalPhilosophers.toString()}
             color="bg-gradient-to-r from-emerald-500 to-green-500"
           />
@@ -521,7 +520,7 @@ export default function PhilosophyPage() {
               </div>
               <input
                 type="text"
-                placeholder="Search philosophical concepts, thinkers, or schools of thought..."
+                placeholder="Shakisha ibitekerezo, abatekereza, cyangwa amatsinda yimitekerereze"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="block w-full pl-10 pr-4 py-3 border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 bg-white/50"
@@ -535,9 +534,9 @@ export default function PhilosophyPage() {
                   onChange={(e) => setSelectedType(e.target.value as any)}
                   className="appearance-none bg-white border border-indigo-200 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-indigo-500"
                 >
-                  <option value="all">All Content</option>
-                  <option value="book">Books Only</option>
-                  <option value="documentary">Documentaries Only</option>
+                  <option value="all">Byose bihari</option>
+                  <option value="book">Ibitabo gusa</option>
+                  <option value="documentary">Ibyegeranyo gusa</option>
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
@@ -578,10 +577,10 @@ export default function PhilosophyPage() {
                   onChange={(e) => setSortBy(e.target.value)}
                   className="appearance-none bg-white border border-indigo-200 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-indigo-500"
                 >
-                  <option value="newest">Newest First</option>
-                  <option value="oldest">Classics First</option>
-                  <option value="views">Most Studied</option>
-                  <option value="title">Title A-Z</option>
+                  <option value="newest">Ibishya mbere</option>
+                  <option value="oldest">Ibishaje mbere</option>
+                  <option value="views">Ibyarebwe cyane</option>
+                  <option value="title">Uhereye A-Z</option>
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
@@ -647,11 +646,10 @@ export default function PhilosophyPage() {
               <Search className="w-12 h-12 text-indigo-400" />
             </div>
             <h3 className="text-2xl font-bold text-gray-900 mb-2">
-              No philosophical content found
+              Nta makuru ajyanye na filozofiya yabonetse
             </h3>
             <p className="text-gray-600">
-              Try adjusting your search or filters to explore our philosophy
-              collection
+              Hindura uko washakishije cyangwa amafiltire ubone ibijyanye n’ubufilozofiya dufite
             </p>
           </div>
         ) : (

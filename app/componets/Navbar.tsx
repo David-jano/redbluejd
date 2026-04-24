@@ -167,7 +167,7 @@ export default function Navbar() {
                   className={desktopDropdownLinkClass}
                   onClick={handleDesktopDropdownLinkClick}
                 >
-                  <FaUserFriends /> UBUMENYA-MUNTU
+                  <FaUserFriends /> UBUMENYAMUNTU
                 </Link>
                 <Link
                   href="/ubugeni"
@@ -250,7 +250,7 @@ export default function Navbar() {
           }`}
         >
           <Link href="/iguriro" className={linkClass}>
-            <FaShoppingBag /> eGURIRO
+            <FaShoppingBag /> eSOKO
           </Link>
           <Link href="/ishuri" className={linkClass}>
             <FaSchool /> ISHURI
@@ -349,7 +349,7 @@ export default function Navbar() {
                 className={mobileLinkClass}
                 onClick={handleMobileLinkClick}
               >
-                <FaShoppingBag /> eGURIRO
+                <FaShoppingBag /> eSOKO
               </Link>
 
               <Link
@@ -392,7 +392,7 @@ export default function Navbar() {
                 className={mobileLinkClass}
                 onClick={handleMobileLinkClick}
               >
-                <FaUserFriends /> UBUMENYA-MUNTU
+                <FaUserFriends /> UBUMENYAMUNTU
               </Link>
               <Link
                 href="/ubugeni"
@@ -413,7 +413,7 @@ export default function Navbar() {
                 className={mobileLinkClass}
                 onClick={handleMobileLinkClick}
               >
-                <FaBook /> PHILOSOPH
+                <FaBook /> FILOZOFIYA
               </Link>
               <Link
                 href="/twandikire"

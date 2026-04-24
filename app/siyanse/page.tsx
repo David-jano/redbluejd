@@ -413,8 +413,8 @@ export default function SciencePage() {
   }) => (
     <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 shadow-sm border border-gray-200">
       <div className="flex items-center gap-3">
-        <div className="p-2 bg-blue-50 rounded-lg">
-          <Icon className="w-5 h-5 text-blue-600" />
+        <div className="p-2 bg-blue-600 rounded-lg">
+          <Icon className="w-5 h-5 text-white" />
         </div>
         <div>
           <p className="text-sm text-gray-600">{label}</p>
@@ -442,16 +442,14 @@ export default function SciencePage() {
         <div className="text-center mb-12">
           <div className="flex justify-center mb-6">
             <div className="relative">
-              <div className="w-24 h-24 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-2xl">
+              <div className="w-24 h-24 bg-blue-600 rounded-2xl flex items-center justify-center shadow-2xl">
                 <Beaker className="w-12 h-12 text-white" />
               </div>
-              <div className="absolute -top-2 -right-2 w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full flex items-center justify-center shadow-lg">
-                <Atom className="w-5 h-5 text-white" />
-              </div>
+              
             </div>
           </div>
           <h1 className="text-3xl font-bold text-black bg-clip-text mb-4">
-            SIYANSE
+            SIYANSI
           </h1>
           <p className="text-l text-gray-600 max-w-3xl mx-auto">
             Shakisha ibintu byavumbuwe na siyansi ukoresheje ibitabo byemewe na
@@ -460,7 +458,7 @@ export default function SciencePage() {
         </div>
 
         {/* Stats Section */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <StatCard
             icon={BookOpen}
             label="Ibitabo bya Siyansi"

@@ -18,7 +18,7 @@ import {
   Loader2,
   Calendar,
 } from "lucide-react";
-import { FaHeart, FaComment } from "react-icons/fa";
+import { FaHeart, FaComment, FaThumbsUp } from "react-icons/fa";
 import ContentCommentsModal from "../componets/ContentCommentsModal";
 import CardLikeButton from "../componets/CardLikeButton";
 
@@ -323,8 +323,8 @@ export default function BooksPage() {
   }) => (
     <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 shadow-sm border border-gray-200">
       <div className="flex items-center gap-3">
-        <div className="p-2 bg-blue-50 rounded-lg">
-          <Icon className="w-5 h-5 text-blue-600" />
+        <div className="p-2 bg-blue-600 rounded-lg">
+          <Icon className="w-5 h-5 text-white" />
         </div>
         <div>
           <p className="text-sm text-gray-600">{label}</p>
@@ -351,38 +351,38 @@ export default function BooksPage() {
         {/* Header */}
         <div className="text-center mb-12">
           <div className="flex justify-center mb-6">
-            <div className="w-20 h-20 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-2xl">
+            <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center shadow-2xl">
               <BookOpen className="w-10 h-10 text-white" />
             </div>
           </div>
-          <h1 className="text-4xl font-bold text-black bg-clip-text mb-4">
-            Welcome to our Digital Library
+          <h1 className="text-3xl font-bold text-black bg-clip-text mb-4">
+            IBITABO
           </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Discover your next favorite book from our curated collection
+          <p className="text-xl text-gray-600 max-w-xl mx-auto">
+            Shaka igitabo ukunze kijyanye n'amateka, ubumenyi ndetse nibindi wifuza
           </p>
         </div>
 
         {/* Stats Section */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <StatCard
             icon={BookOpen}
-            label="Total Books"
+            label="Ibitabo byose"
             value={stats.totalBooks.toString()}
           />
           <StatCard
             icon={Eye}
-            label="Total Views"
+            label="Ababirebye"
             value={stats.totalViews.toLocaleString()}
           />
           <StatCard
             icon={BookOpen}
-            label="Genres"
+            label="Ibyiciro"
             value={stats.totalGenres.toString()}
           />
           <StatCard
-            icon={FaHeart}
-            label="Total Likes"
+            icon={FaThumbsUp}
+            label="Ababikunze"
             value={stats.totalLikes.toLocaleString()}
           />
         </div>
@@ -396,7 +396,7 @@ export default function BooksPage() {
               </div>
               <input
                 type="text"
-                placeholder="Search books or authors..."
+                placeholder="shaka igitabo cyangwa umwanditsi..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
@@ -427,10 +427,10 @@ export default function BooksPage() {
                   onChange={(e) => setSortBy(e.target.value)}
                   className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="newest">Newest First</option>
-                  <option value="oldest">Oldest First</option>
-                  <option value="views">Most Views</option>
-                  <option value="title">Title A-Z</option>
+                  <option value="newest">Habanze Ibishya</option>
+                  <option value="oldest">Habanze ibya kera</option>
+                  <option value="views">Ibyarebwe Cyane</option>
+                  <option value="title">Bikurikize A-Z</option>
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>

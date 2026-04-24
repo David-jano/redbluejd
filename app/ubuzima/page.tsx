@@ -467,7 +467,7 @@ export default function HealthPage() {
         </div>
 
         {/* Stats Section */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 mb-8">
           <StatCard
             icon={BookOpen}
             label="Inyandiko z'ubuzima"
@@ -554,10 +554,9 @@ export default function HealthPage() {
                   onChange={(e) => setSortBy(e.target.value)}
                   className="appearance-none bg-white border border-green-200 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-green-500"
                 >
-                  <option value="newest">Gishya mbere</option>
-                  <option value="oldest">Gishaje mbere</option>
-                  <option value="views">Byarebwe cyane</option>
-                  <option value="rating">Byakunzwe cyane</option>
+                  <option value="newest">Igishya mbere</option>
+                  <option value="oldest">Igishaje mbere</option>
+                  <option value="views">Ibyarebwe cyane</option>
                   <option value="title">Kuva A-Z</option>
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -665,8 +664,7 @@ export default function HealthPage() {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-green-900/30 to-transparent z-10" />
                   </div>
-
-                  <div className="absolute top-3 left-3 z-30">
+                  {/* <div className="absolute top-3 left-3 z-30">
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-bold text-white shadow-lg ${
                         item.type === "book"
@@ -676,7 +674,7 @@ export default function HealthPage() {
                     >
                       {item.type === "book" ? "Book" : "Documentary"}
                     </span>
-                  </div>
+                  </div> */}
 
                   <div className="absolute top-3 right-3 z-30 space-y-2">
                     {item.certified && (
@@ -819,28 +817,6 @@ export default function HealthPage() {
                           {new Date(item.published_date).getFullYear()}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <div
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            item.focus_area === "Nutrition"
-                              ? "bg-green-100 text-green-700"
-                              : item.focus_area === "Fitness"
-                                ? "bg-blue-100 text-blue-700"
-                                : item.focus_area === "Mental Health"
-                                  ? "bg-purple-100 text-purple-700"
-                                  : item.focus_area === "Medical"
-                                    ? "bg-red-100 text-red-700"
-                                    : item.focus_area === "Wellness"
-                                      ? "bg-amber-100 text-amber-700"
-                                      : "bg-teal-100 text-teal-700"
-                          }`}
-                        >
-                          {item.focus_area}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-between">
                       <div className="flex items-center gap-2">
                         {item.type === "book" && item.pages ? (
                           <span className="bg-green-50 text-green-700 text-xs px-2 py-1 rounded-full">
@@ -853,7 +829,9 @@ export default function HealthPage() {
                           </span>
                         ) : null}
                       </div>
+                    </div>
 
+                    <div className="flex flex-wrap items-center justify-between">
                       <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           className="p-1 hover:bg-gray-100 rounded-full"

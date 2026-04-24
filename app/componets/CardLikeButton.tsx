@@ -105,7 +105,7 @@ export default function ArticleLikeButton({
       disabled={loading || !userName}
       className={`flex items-center gap-2 px-4 py-2 rounded-full transition-colors ${
         liked
-          ? "bg-red-50 text-red-600"
+          ? "bg-red-50 text-gray-600"
           : "bg-gray-100 text-gray-600 hover:bg-gray-200"
       } ${!userName ? "opacity-50 cursor-not-allowed" : ""}`}
     >

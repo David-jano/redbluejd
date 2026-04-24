@@ -338,8 +338,8 @@ export default function HistoryPage() {
   const StatCard = ({ icon: Icon, label, value }: { icon: any; label: string; value: string }) => (
     <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 shadow-sm border border-gray-200">
       <div className="flex items-center gap-3">
-        <div className="p-2 bg-blue-50 rounded-lg">
-          <Icon className="w-5 h-5 text-blue-600" />
+        <div className="p-2 bg-blue-600 rounded-lg">
+          <Icon className="w-5 h-5 text-white" />
         </div>
         <div>
           <p className="text-sm text-gray-600">{label}</p>
@@ -370,7 +370,7 @@ export default function HistoryPage() {
               <div className="w-24 h-24 bg-gradient-to-r from-amber-600 via-red-600 to-stone-800 rounded-2xl flex items-center justify-center shadow-2xl">
                 <Globe className="w-12 h-12 text-white" />
               </div>
-              <div className="absolute -top-2 -right-2 w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
+              <div className="absolute -top-2 -right-2 w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center shadow-lg">
                 <Calendar className="w-5 h-5 text-white" />
               </div>
             </div>
@@ -380,12 +380,12 @@ export default function HistoryPage() {
           </h1>
           <p className="text-l text-gray-600 max-w-3xl mx-auto">
             Menya Umwaduko w'ubuzima bwa muntu binyuze mu bikorwa by'amateka
-            n'inyandiko-mashusho z'umwimerere.
+            n'inyandiko ndetse n'amashusho by'umwimerere.
           </p>
         </div>
 
         {/* Stats Section */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <StatCard icon={BookOpen} label="Ibitabo by'Amateka" value={stats.totalBooks.toString()} />
           <StatCard icon={Film} label="Dokumanteri" value={stats.totalDocumentaries.toString()} />
           <StatCard icon={Globe} label="Imico n'Umuco" value={stats.totalRegions.toString()} />

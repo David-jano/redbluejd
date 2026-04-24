@@ -73,19 +73,19 @@ function getValidImageUrl(imageUrl: string | null | undefined): string {
   if (!imageUrl) {
     return "https://placehold.co/800x600/e0e0e0/999?text=No+Image";
   }
-  
-  if (imageUrl.startsWith('http')) {
+
+  if (imageUrl.startsWith("http")) {
     return imageUrl;
   }
-  
-  if (imageUrl.startsWith('/images/')) {
-    return imageUrl.replace('/images/', '/uploads/');
+
+  if (imageUrl.startsWith("/images/")) {
+    return imageUrl.replace("/images/", "/uploads/");
   }
-  
-  if (imageUrl.startsWith('/uploads/')) {
+
+  if (imageUrl.startsWith("/uploads/")) {
     return imageUrl;
   }
-  
+
   return imageUrl;
 }
 
@@ -114,8 +114,18 @@ const SimplePDFViewer = ({
             onClick={onClose}
             className="p-2 hover:bg-purple-50 rounded-full"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
           <h2 className="text-lg font-bold">{item.title}</h2>
@@ -150,13 +160,18 @@ export default function PsychologyPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedApproach, setSelectedApproach] = useState("all");
-  const [selectedType, setSelectedType] = useState<"all" | "book" | "documentary">("all");
+  const [selectedType, setSelectedType] = useState<
+    "all" | "book" | "documentary"
+  >("all");
   const [sortBy, setSortBy] = useState("newest");
   const [selectedItem, setSelectedItem] = useState<PsychologyItem | null>(null);
-  const [activeTab, setActiveTab] = useState<"books" | "documentaries">("books");
+  const [activeTab, setActiveTab] = useState<"books" | "documentaries">(
+    "books",
+  );
   const [selectedPDF, setSelectedPDF] = useState<PsychologyItem | null>(null);
   const [commentsModalOpen, setCommentsModalOpen] = useState(false);
-  const [selectedCommentItem, setSelectedCommentItem] = useState<PsychologyItem | null>(null);
+  const [selectedCommentItem, setSelectedCommentItem] =
+    useState<PsychologyItem | null>(null);
   const [items, setItems] = useState<PsychologyItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -168,15 +183,31 @@ export default function PsychologyPage() {
   });
 
   const categories: string[] = [
-    "all", "Clinical Psychology", "Cognitive Psychology", "Social Psychology",
-    "Developmental Psychology", "Abnormal Psychology", "Personality Psychology",
-    "Neuropsychology", "Forensic Psychology", "Health Psychology",
-    "Educational Psychology", "Industrial Psychology", "Positive Psychology",
+    "all",
+    "Clinical Psychology",
+    "Cognitive Psychology",
+    "Social Psychology",
+    "Developmental Psychology",
+    "Abnormal Psychology",
+    "Personality Psychology",
+    "Neuropsychology",
+    "Forensic Psychology",
+    "Health Psychology",
+    "Educational Psychology",
+    "Industrial Psychology",
+    "Positive Psychology",
   ];
 
   const approaches = [
-    "all", "Cognitive", "Behavioral", "Psychoanalytic", "Humanistic",
-    "Evolutionary", "Social", "Clinical", "Developmental",
+    "all",
+    "Cognitive",
+    "Behavioral",
+    "Psychoanalytic",
+    "Humanistic",
+    "Evolutionary",
+    "Social",
+    "Clinical",
+    "Developmental",
   ];
 
   useEffect(() => {
@@ -199,7 +230,7 @@ export default function PsychologyPage() {
         supabase
           .from("content_likes")
           .select("content_id")
-          .eq("content_type", "psychology")
+          .eq("content_type", "psychology"),
       ]);
 
       if (itemsResult.error) throw itemsResult.error;
@@ -207,7 +238,10 @@ export default function PsychologyPage() {
       const commentMap = new Map();
       if (commentsResult.data) {
         commentsResult.data.forEach((item: any) => {
-          commentMap.set(item.content_id, (commentMap.get(item.content_id) || 0) + 1);
+          commentMap.set(
+            item.content_id,
+            (commentMap.get(item.content_id) || 0) + 1,
+          );
         });
       }
 
@@ -237,10 +271,18 @@ export default function PsychologyPage() {
     const books = data.filter((i) => i.type === "book").length;
     const docs = data.filter((i) => i.type === "documentary").length;
     const approaches = new Set(data.map((i) => i.approach)).size;
-    const experts = new Set(data.map((i) => i.author || i.narrator).filter(Boolean)).size;
+    const experts = new Set(
+      data.map((i) => i.author || i.narrator).filter(Boolean),
+    ).size;
     const totalLikes = data.reduce((acc, i) => acc + (i.like_count || 0), 0);
 
-    setStats({ totalBooks: books, totalDocumentaries: docs, totalApproaches: approaches, totalExperts: experts, totalLikes });
+    setStats({
+      totalBooks: books,
+      totalDocumentaries: docs,
+      totalApproaches: approaches,
+      totalExperts: experts,
+      totalLikes,
+    });
   };
 
   const trackView = async (item: PsychologyItem) => {
@@ -254,7 +296,9 @@ export default function PsychologyPage() {
       if (error) throw error;
 
       setItems((prevItems) =>
-        prevItems.map((i) => i.id === item.id ? { ...i, views: newViews } : i)
+        prevItems.map((i) =>
+          i.id === item.id ? { ...i, views: newViews } : i,
+        ),
       );
     } catch (error) {
       console.error("Error tracking view:", error);
@@ -269,8 +313,10 @@ export default function PsychologyPage() {
         item.narrator?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         false;
 
-      const matchesCategory = selectedCategory === "all" || item.category === selectedCategory;
-      const matchesApproach = selectedApproach === "all" || item.approach === selectedApproach;
+      const matchesCategory =
+        selectedCategory === "all" || item.category === selectedCategory;
+      const matchesApproach =
+        selectedApproach === "all" || item.approach === selectedApproach;
       const matchesType = selectedType === "all" || item.type === selectedType;
 
       return matchesSearch && matchesCategory && matchesApproach && matchesType;
@@ -279,9 +325,15 @@ export default function PsychologyPage() {
     filtered = [...filtered].sort((a, b) => {
       switch (sortBy) {
         case "newest":
-          return new Date(b.published_date).getTime() - new Date(a.published_date).getTime();
+          return (
+            new Date(b.published_date).getTime() -
+            new Date(a.published_date).getTime()
+          );
         case "oldest":
-          return new Date(a.published_date).getTime() - new Date(b.published_date).getTime();
+          return (
+            new Date(a.published_date).getTime() -
+            new Date(b.published_date).getTime()
+          );
         case "views":
           return (b.views || 0) - (a.views || 0);
         case "title":
@@ -298,7 +350,9 @@ export default function PsychologyPage() {
 
   const filteredItems = getFilteredItems();
   const books = filteredItems.filter((item) => item.type === "book");
-  const documentaries = filteredItems.filter((item) => item.type === "documentary");
+  const documentaries = filteredItems.filter(
+    (item) => item.type === "documentary",
+  );
   const activeItems = activeTab === "books" ? books : documentaries;
 
   const handleItemClick = async (item: PsychologyItem) => {
@@ -350,7 +404,7 @@ export default function PsychologyPage() {
       "Developmental Psychology": <TrendingUp className="w-4 h-4" />,
       "Abnormal Psychology": <Zap className="w-4 h-4" />,
       "Personality Psychology": <Target className="w-4 h-4" />,
-      "Neuropsychology": <Brain className="w-4 h-4" />,
+      Neuropsychology: <Brain className="w-4 h-4" />,
       "Positive Psychology": <Heart className="w-4 h-4" />,
       "Forensic Psychology": <Shield className="w-4 h-4" />,
       "Health Psychology": <Heart className="w-4 h-4" />,
@@ -362,19 +416,29 @@ export default function PsychologyPage() {
 
   const getApproachColor = (approach: string) => {
     const colors: Record<string, string> = {
-      "Cognitive": "bg-blue-100 text-blue-700",
-      "Behavioral": "bg-green-100 text-green-700",
-      "Psychoanalytic": "bg-purple-100 text-purple-700",
-      "Humanistic": "bg-amber-100 text-amber-700",
-      "Evolutionary": "bg-red-100 text-red-700",
-      "Social": "bg-indigo-100 text-indigo-700",
-      "Clinical": "bg-pink-100 text-pink-700",
-      "Developmental": "bg-teal-100 text-teal-700",
+      Cognitive: "bg-blue-100 text-blue-700",
+      Behavioral: "bg-green-100 text-green-700",
+      Psychoanalytic: "bg-purple-100 text-purple-700",
+      Humanistic: "bg-amber-100 text-amber-700",
+      Evolutionary: "bg-red-100 text-red-700",
+      Social: "bg-indigo-100 text-indigo-700",
+      Clinical: "bg-pink-100 text-pink-700",
+      Developmental: "bg-teal-100 text-teal-700",
     };
     return colors[approach] || "bg-gray-100 text-gray-700";
   };
 
-  const StatCard = ({ icon: Icon, label, value, color }: { icon: any; label: string; value: string; color: string }) => (
+  const StatCard = ({
+    icon: Icon,
+    label,
+    value,
+    color,
+  }: {
+    icon: any;
+    label: string;
+    value: string;
+    color: string;
+  }) => (
     <div className="bg-white rounded-xl p-4 shadow-lg border border-purple-100">
       <div className="flex items-center gap-3">
         <div className={`p-2 rounded-lg ${color}`}>
@@ -406,7 +470,7 @@ export default function PsychologyPage() {
         <div className="text-center mb-12">
           <div className="flex justify-center mb-6">
             <div className="relative">
-              <div className="w-24 h-24 bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 rounded-2xl flex items-center justify-center shadow-2xl">
+              <div className="w-24 h-24 bg-purple-600 rounded-2xl flex items-center justify-center shadow-2xl">
                 <Brain className="w-12 h-12 text-white" />
               </div>
               <div className="absolute -top-2 -right-2 w-10 h-10 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center shadow-lg">
@@ -414,18 +478,35 @@ export default function PsychologyPage() {
               </div>
             </div>
           </div>
-          <h1 className="text-4xl font-bold text-black bg-clip-text mb-4">Ubumenyamuntu</h1>
+          <h1 className="text-3xl font-bold text-black bg-clip-text mb-4">
+            UBUMENYAMUNTU
+          </h1>
           <p className="text-lg text-gray-600 max-w-3xl mx-auto">
-            Shakisha ubujyakuzimu bw'imitekerereze ya muntu ukoresheje Ibitabo
-            na documentaire mu buryo bworoshye
+            Shakisha imitekerereze ya muntu ukoresheje Ibitabo na documentaire
+            mu buryo bworoshye
           </p>
         </div>
 
         {/* Stats Section */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 mb-8">
-          <StatCard icon={BookOpen} label="Psychology Texts" value={stats.totalBooks.toString()} color="bg-gradient-to-r from-purple-500 to-indigo-500" />
-          <StatCard icon={Film} label="Psychological Studies" value={stats.totalDocumentaries.toString()} color="bg-gradient-to-r from-pink-500 to-rose-500" />
-          <StatCard icon={Brain} label="Psychological Approaches" value={stats.totalApproaches.toString()} color="bg-gradient-to-r from-blue-500 to-cyan-500" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-8">
+          <StatCard
+            icon={BookOpen}
+            label="Ibyanditswe "
+            value={stats.totalBooks.toString()}
+            color="bg-gradient-to-r from-purple-500 to-indigo-500"
+          />
+          <StatCard
+            icon={Film}
+            label="Amasomo y'ubumenyamuntu'"
+            value={stats.totalDocumentaries.toString()}
+            color="bg-gradient-to-r from-pink-500 to-rose-500"
+          />
+          <StatCard
+            icon={Brain}
+            label="Ibyagezweho n'ubumenyamuntu'"
+            value={stats.totalApproaches.toString()}
+            color="bg-gradient-to-r from-blue-500 to-cyan-500"
+          />
         </div>
 
         {/* Search & Filters */}
@@ -437,7 +518,7 @@ export default function PsychologyPage() {
               </div>
               <input
                 type="text"
-                placeholder="Search psychological theories, studies, or researchers..."
+                placeholder="Shakisha inyigisho, ubushakashatsi cyangwa abahanga mu mitekerereze...."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="block w-full pl-10 pr-4 py-3 border border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200 bg-white/50"
@@ -451,9 +532,9 @@ export default function PsychologyPage() {
                   onChange={(e) => setSelectedType(e.target.value as any)}
                   className="appearance-none bg-white border border-purple-200 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-purple-500"
                 >
-                  <option value="all">All Content</option>
-                  <option value="book">Books Only</option>
-                  <option value="documentary">Documentaries Only</option>
+                  <option value="all">Byose</option>
+                  <option value="book">Ibitabo gusa</option>
+                  <option value="documentary">Ibyegeranyo gusa</option>
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
@@ -494,11 +575,11 @@ export default function PsychologyPage() {
                   onChange={(e) => setSortBy(e.target.value)}
                   className="appearance-none bg-white border border-purple-200 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-purple-500"
                 >
-                  <option value="newest">Newest First</option>
-                  <option value="oldest">Classics First</option>
-                  <option value="views">Most Viewed</option>
+                  <option value="newest">Ibishya mbere</option>
+                  <option value="oldest">Ibyakera mbere</option>
+                  <option value="views">Ibyarebwe cyane</option>
                   <option value="rating">Highest Rated</option>
-                  <option value="title">Title A-Z</option>
+                  <option value="title">Guhera A-Z</option>
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
@@ -528,22 +609,30 @@ export default function PsychologyPage() {
               <button
                 onClick={() => setActiveTab("books")}
                 className={`py-3 px-1 border-b-2 font-medium text-lg transition-colors flex items-center gap-2 ${
-                  activeTab === "books" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"
+                  activeTab === "books"
+                    ? "border-purple-600 text-purple-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
               >
                 <BookOpen className="w-5 h-5" />
                 Books
-                <span className="bg-purple-100 text-purple-700 text-sm font-normal px-2 py-1 rounded-full">{books.length}</span>
+                <span className="bg-purple-100 text-purple-700 text-sm font-normal px-2 py-1 rounded-full">
+                  {books.length}
+                </span>
               </button>
               <button
                 onClick={() => setActiveTab("documentaries")}
                 className={`py-3 px-1 border-b-2 font-medium text-lg transition-colors flex items-center gap-2 ${
-                  activeTab === "documentaries" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"
+                  activeTab === "documentaries"
+                    ? "border-purple-600 text-purple-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
               >
                 <Film className="w-5 h-5" />
                 Documentaries
-                <span className="bg-purple-100 text-purple-700 text-sm font-normal px-2 py-1 rounded-full">{documentaries.length}</span>
+                <span className="bg-purple-100 text-purple-700 text-sm font-normal px-2 py-1 rounded-full">
+                  {documentaries.length}
+                </span>
               </button>
             </nav>
           </div>
@@ -555,11 +644,22 @@ export default function PsychologyPage() {
             <div className="w-24 h-24 bg-gradient-to-r from-purple-100 to-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <Search className="w-12 h-12 text-purple-400" />
             </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-2">No psychology content found</h3>
-            <p className="text-gray-600">Try adjusting your search or filters to explore our psychology collection</p>
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">
+              Nta bijyanye na siyansi y’imitekerereze byabonetse.
+            </h3>
+            <p className="text-gray-600">
+              Gerageza guhindura uburyo washakishije cyangwa ukoresha amafiltire
+              kugira ngo ubashe kubona ibijyanye nimitekerereze.
+            </p>
           </div>
         ) : (
-          <div className={viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" : "space-y-6"}>
+          <div
+            className={
+              viewMode === "grid"
+                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                : "space-y-6"
+            }
+          >
             {activeItems.map((item) => (
               <div
                 key={item.id}
@@ -569,24 +669,22 @@ export default function PsychologyPage() {
                 onClick={() => handleItemClick(item)}
               >
                 {/* Cover Image */}
-                <div className={`relative overflow-hidden bg-gradient-to-br from-purple-50 to-indigo-100 ${viewMode === "list" ? "w-40 flex-shrink-0" : "h-48"}`}>
+                <div
+                  className={`relative overflow-hidden bg-gradient-to-br from-purple-50 to-indigo-100 ${viewMode === "list" ? "w-40 flex-shrink-0" : "h-48"}`}
+                >
                   <div className="relative w-full h-full">
                     <ClientImage
                       src={getValidImageUrl(item.cover_image)}
                       alt={item.title}
                       fill
                       className="object-cover"
-                      sizes={viewMode === "list" ? "160px" : "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"}
+                      sizes={
+                        viewMode === "list"
+                          ? "160px"
+                          : "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
+                      }
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-purple-900/20 to-transparent z-10" />
-                  </div>
-
-                  <div className="absolute top-3 left-3 z-30">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold text-white shadow-lg ${
-                      item.type === "book" ? "bg-gradient-to-r from-purple-500 to-indigo-500" : "bg-gradient-to-r from-pink-500 to-rose-500"
-                    }`}>
-                      {item.type === "book" ? "Book" : "Documentary"}
-                    </span>
                   </div>
 
                   <div className="absolute bottom-3 right-3 z-30">
@@ -598,20 +696,21 @@ export default function PsychologyPage() {
 
                   <div className="absolute top-3 right-3 z-30 space-y-2">
                     {item.is_featured && (
-                      <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">Seminal Work</span>
+                      <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
+                        Seminal Work
+                      </span>
                     )}
                     {item.is_new && (
-                      <span className="bg-gradient-to-r from-green-500 to-emerald-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">New Research</span>
-                    )}
-                    {item.therapy_type && (
-                      <span className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
-                        {item.therapy_type.split(" ")[0]}
+                      <span className="bg-gradient-to-r from-green-500 to-emerald-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
+                        New Research
                       </span>
                     )}
                   </div>
 
                   <div className="absolute bottom-3 left-3 z-30">
-                    <span className={`px-3 py-1 backdrop-blur-sm text-xs font-bold rounded-full shadow-lg flex items-center gap-1 ${getApproachColor(item.approach)}`}>
+                    <span
+                      className={`px-3 py-1 backdrop-blur-sm text-xs font-bold rounded-full shadow-lg flex items-center gap-1 ${getApproachColor(item.approach)}`}
+                    >
                       {item.approach}
                     </span>
                   </div>
@@ -620,22 +719,33 @@ export default function PsychologyPage() {
                     <div className="flex gap-3">
                       {item.type === "documentary" ? (
                         <button
-                          onClick={(e) => { e.stopPropagation(); handlePlay(item); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePlay(item);
+                          }}
                           className="bg-red-600 text-white p-4 rounded-full hover:bg-red-700 transition-all transform hover:scale-110 shadow-xl"
                         >
                           <Play className="w-6 h-6" fill="white" />
                         </button>
-                      ) : item.pdf_url && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleRead(item); }}
-                          className="bg-green-600 text-white p-4 rounded-full hover:bg-green-700 transition-all transform hover:scale-110 shadow-xl"
-                        >
-                          <BookOpen className="w-6 h-6" />
-                        </button>
+                      ) : (
+                        item.pdf_url && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRead(item);
+                            }}
+                            className="bg-green-600 text-white p-4 rounded-full hover:bg-green-700 transition-all transform hover:scale-110 shadow-xl"
+                          >
+                            <BookOpen className="w-6 h-6" />
+                          </button>
+                        )
                       )}
                       {item.type === "book" && item.pdf_url && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleDownload(item); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownload(item);
+                          }}
                           className="bg-blue-600 text-white p-4 rounded-full hover:bg-blue-700 transition-all transform hover:scale-110 shadow-xl"
                         >
                           <Download className="w-6 h-6" />
@@ -646,7 +756,9 @@ export default function PsychologyPage() {
                 </div>
 
                 {/* Content Info */}
-                <div className={`p-4 flex-1 flex flex-col ${viewMode === "list" ? "flex-1" : ""}`}>
+                <div
+                  className={`p-4 flex-1 flex flex-col ${viewMode === "list" ? "flex-1" : ""}`}
+                >
                   <div className="mb-3 flex-1">
                     <h3 className="font-bold text-lg text-gray-900 line-clamp-2 mb-2 group-hover:text-purple-600 transition-colors">
                       {item.title}
@@ -657,12 +769,16 @@ export default function PsychologyPage() {
                         {item.type === "book" ? (
                           <>
                             <User className="w-4 h-4 mr-1 flex-shrink-0" />
-                            <span className="text-sm font-medium truncate">{item.author || "Unknown"}</span>
+                            <span className="text-sm font-medium truncate">
+                              {item.author || "Unknown"}
+                            </span>
                           </>
                         ) : (
                           <>
                             <Film className="w-4 h-4 mr-1 flex-shrink-0" />
-                            <span className="text-sm font-medium truncate">{item.narrator || "Unknown"}</span>
+                            <span className="text-sm font-medium truncate">
+                              {item.narrator || "Unknown"}
+                            </span>
                           </>
                         )}
                       </div>
@@ -671,7 +787,9 @@ export default function PsychologyPage() {
                         <div className="flex items-center gap-3">
                           <div className="flex items-center">
                             <Eye className="w-4 h-4 mr-1" />
-                            <span>{item.views?.toLocaleString() || 0} views</span>
+                            <span>
+                              {item.views?.toLocaleString() || 0} views
+                            </span>
                           </div>
 
                           <CardLikeButton
@@ -680,12 +798,19 @@ export default function PsychologyPage() {
                             initialCount={item.like_count || 0}
                             onLikeChange={(newCount) => {
                               setItems((prevItems) =>
-                                prevItems.map((i) => i.id === item.id ? { ...i, like_count: newCount } : i)
+                                prevItems.map((i) =>
+                                  i.id === item.id
+                                    ? { ...i, like_count: newCount }
+                                    : i,
+                                ),
                               );
                             }}
                           />
 
-                          <button onClick={(e) => handleOpenComments(item, e)} className="flex items-center gap-1 hover:text-purple-600 transition-colors">
+                          <button
+                            onClick={(e) => handleOpenComments(item, e)}
+                            className="flex items-center gap-1 hover:text-purple-600 transition-colors"
+                          >
                             <FaComment className="w-4 h-4" />
                             <span>{item.comment_count || 0}</span>
                           </button>
@@ -693,27 +818,24 @@ export default function PsychologyPage() {
                       </div>
                     </div>
 
-                    <p className="text-gray-600 text-sm line-clamp-2 mb-3">{item.description}</p>
+                    <p className="text-gray-600 text-sm line-clamp-2 mb-3">
+                      {item.description}
+                    </p>
                   </div>
 
                   <div className="pt-3 border-t border-gray-100">
                     <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
                       <div className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
-                        <span>{new Date(item.published_date).getFullYear()}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded-full flex items-center gap-1">
-                          {getCategoryIcon(item.category)}
-                          {item.category.split(" ")[0]}
+                        <span>
+                          {new Date(item.published_date).getFullYear()}
                         </span>
                       </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-between">
                       <div className="flex items-center gap-2">
                         {item.type === "book" && item.pages ? (
-                          <span className="bg-indigo-50 text-indigo-700 text-xs px-2 py-1 rounded-full">📄 {item.pages}p</span>
+                          <span className="bg-indigo-50 text-indigo-700 text-xs px-2 py-1 rounded-full">
+                            📄 {item.pages}p
+                          </span>
                         ) : item.type === "documentary" && item.duration ? (
                           <span className="flex items-center gap-1 bg-pink-50 text-pink-700 text-xs px-2 py-1 rounded-full">
                             <Clock className="w-3 h-3" />
@@ -721,12 +843,20 @@ export default function PsychologyPage() {
                           </span>
                         ) : null}
                       </div>
+                    </div>
 
+                    <div className="flex flex-wrap items-center justify-between">
                       <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="p-1 hover:bg-gray-100 rounded-full" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className="p-1 hover:bg-gray-100 rounded-full"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <Bookmark className="w-4 h-4 text-gray-400 hover:text-gray-600" />
                         </button>
-                        <button className="p-1 hover:bg-gray-100 rounded-full" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className="p-1 hover:bg-gray-100 rounded-full"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <Share2 className="w-4 h-4 text-gray-400 hover:text-gray-600" />
                         </button>
                       </div>
@@ -752,16 +882,24 @@ export default function PsychologyPage() {
                       className="object-cover"
                     />
                     <div className="absolute bottom-4 left-4">
-                      <span className={`px-4 py-2 rounded-full text-sm font-bold text-white shadow-lg ${
-                        selectedItem.type === "book" ? "bg-gradient-to-r from-purple-500 to-indigo-500" : "bg-gradient-to-r from-pink-500 to-rose-500"
-                      }`}>
-                        {selectedItem.type === "book" ? "Psychology Book" : "Psychological Documentary"}
+                      <span
+                        className={`px-4 py-2 rounded-full text-sm font-bold text-white shadow-lg ${
+                          selectedItem.type === "book"
+                            ? "bg-gradient-to-r from-purple-500 to-indigo-500"
+                            : "bg-gradient-to-r from-pink-500 to-rose-500"
+                        }`}
+                      >
+                        {selectedItem.type === "book"
+                          ? "Psychology Book"
+                          : "Psychological Documentary"}
                       </span>
                     </div>
                   </div>
 
                   <div className="mt-4 flex justify-center">
-                    <div className={`px-4 py-2 rounded-full font-medium ${getApproachColor(selectedItem.approach)}`}>
+                    <div
+                      className={`px-4 py-2 rounded-full font-medium ${getApproachColor(selectedItem.approach)}`}
+                    >
                       {selectedItem.approach} Approach
                     </div>
                   </div>
@@ -781,86 +919,130 @@ export default function PsychologyPage() {
                           </span>
                         )}
                       </div>
-                      <h2 className="text-3xl font-bold text-gray-900 mb-2">{selectedItem.title}</h2>
+                      <h2 className="text-3xl font-bold text-gray-900 mb-2">
+                        {selectedItem.title}
+                      </h2>
                       <div className="flex items-center space-x-4 mb-4">
                         <div className="flex items-center text-gray-600">
                           {selectedItem.type === "book" ? (
                             <>
                               <User className="w-5 h-5 mr-2" />
-                              <span className="text-lg font-medium">{selectedItem.author || "Unknown"}</span>
+                              <span className="text-lg font-medium">
+                                {selectedItem.author || "Unknown"}
+                              </span>
                             </>
                           ) : (
                             <>
                               <Film className="w-5 h-5 mr-2" />
-                              <span className="text-lg font-medium">{selectedItem.narrator || "Unknown"}</span>
+                              <span className="text-lg font-medium">
+                                {selectedItem.narrator || "Unknown"}
+                              </span>
                             </>
                           )}
                         </div>
                         <div className="flex items-center text-gray-500">
                           <Eye className="w-5 h-5 mr-2" />
-                          <span>{selectedItem.views?.toLocaleString() || 0} views</span>
+                          <span>
+                            {selectedItem.views?.toLocaleString() || 0} views
+                          </span>
                         </div>
                       </div>
                     </div>
-                    <button onClick={() => setSelectedItem(null)} className="text-gray-400 hover:text-gray-600 transition-colors text-2xl p-2 hover:bg-gray-100 rounded-full">
+                    <button
+                      onClick={() => setSelectedItem(null)}
+                      className="text-gray-400 hover:text-gray-600 transition-colors text-2xl p-2 hover:bg-gray-100 rounded-full"
+                    >
                       ×
                     </button>
                   </div>
 
                   <div className="space-y-6">
-                    <p className="text-gray-700 leading-relaxed text-lg">{selectedItem.description}</p>
+                    <p className="text-gray-700 leading-relaxed text-lg">
+                      {selectedItem.description}
+                    </p>
 
                     <div className="grid grid-cols-2 gap-4 py-4 bg-purple-50 rounded-xl p-4">
                       <div>
-                        <span className="text-sm text-gray-500">Psychological Category</span>
-                        <p className="font-bold text-lg text-gray-800">{selectedItem.category}</p>
+                        <span className="text-sm text-gray-500">
+                          Psychological Category
+                        </span>
+                        <p className="font-bold text-lg text-gray-800">
+                          {selectedItem.category}
+                        </p>
                       </div>
                       <div>
                         <span className="text-sm text-gray-500">Published</span>
-                        <p className="font-medium">{new Date(selectedItem.published_date).toLocaleDateString("en-US", {
-                          year: "numeric", month: "long", day: "numeric",
-                        })}</p>
+                        <p className="font-medium">
+                          {new Date(
+                            selectedItem.published_date,
+                          ).toLocaleDateString("en-US", {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })}
+                        </p>
                       </div>
                       <div>
-                        <span className="text-sm text-gray-500">{selectedItem.type === "book" ? "Pages" : "Duration"}</span>
-                        <p className="font-medium">{selectedItem.type === "book" ? `${selectedItem.pages || 0} pages` : selectedItem.duration || "N/A"}</p>
+                        <span className="text-sm text-gray-500">
+                          {selectedItem.type === "book" ? "Pages" : "Duration"}
+                        </span>
+                        <p className="font-medium">
+                          {selectedItem.type === "book"
+                            ? `${selectedItem.pages || 0} pages`
+                            : selectedItem.duration || "N/A"}
+                        </p>
                       </div>
                       <div>
-                        <span className="text-sm text-gray-500">Theoretical Approach</span>
+                        <span className="text-sm text-gray-500">
+                          Theoretical Approach
+                        </span>
                         <p className="font-medium">{selectedItem.approach}</p>
                       </div>
                     </div>
 
                     <div className="flex space-x-4 pt-6">
-                      {selectedItem?.type === "documentary" ? (
-                        selectedItem?.youtube_url && (
+                      {selectedItem?.type === "documentary"
+                        ? selectedItem?.youtube_url && (
+                            <button
+                              onClick={() => {
+                                window.open(
+                                  selectedItem.youtube_url!,
+                                  "_blank",
+                                );
+                                setSelectedItem(null);
+                              }}
+                              className="flex-1 bg-gradient-to-r from-red-600 to-red-700 text-white py-4 px-6 rounded-xl font-semibold hover:from-red-700 hover:to-red-800 transition-all flex items-center justify-center gap-3 shadow-lg"
+                            >
+                              <Play className="w-5 h-5" fill="white" />
+                              Watch Study
+                              <ExternalLink className="w-4 h-4" />
+                            </button>
+                          )
+                        : selectedItem?.pdf_url && (
+                            <button
+                              onClick={() => {
+                                handleRead(selectedItem);
+                                setSelectedItem(null);
+                              }}
+                              className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-4 px-6 rounded-xl font-semibold hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center justify-center gap-3 shadow-lg"
+                            >
+                              <BookOpen className="w-5 h-5" />
+                              Read Psychological Study
+                            </button>
+                          )}
+                      {selectedItem?.type === "book" &&
+                        selectedItem?.pdf_url && (
                           <button
-                            onClick={() => { window.open(selectedItem.youtube_url!, "_blank"); setSelectedItem(null); }}
-                            className="flex-1 bg-gradient-to-r from-red-600 to-red-700 text-white py-4 px-6 rounded-xl font-semibold hover:from-red-700 hover:to-red-800 transition-all flex items-center justify-center gap-3 shadow-lg"
+                            onClick={() => {
+                              handleDownload(selectedItem);
+                              setSelectedItem(null);
+                            }}
+                            className="flex-1 border border-gray-300 text-gray-700 py-4 px-6 rounded-xl font-semibold hover:bg-gray-50 transition-all flex items-center justify-center gap-3"
                           >
-                            <Play className="w-5 h-5" fill="white" />
-                            Watch Study
-                            <ExternalLink className="w-4 h-4" />
+                            <Download className="w-5 h-5" />
+                            Download PDF
                           </button>
-                        )
-                      ) : selectedItem?.pdf_url && (
-                        <button
-                          onClick={() => { handleRead(selectedItem); setSelectedItem(null); }}
-                          className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-4 px-6 rounded-xl font-semibold hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center justify-center gap-3 shadow-lg"
-                        >
-                          <BookOpen className="w-5 h-5" />
-                          Read Psychological Study
-                        </button>
-                      )}
-                      {selectedItem?.type === "book" && selectedItem?.pdf_url && (
-                        <button
-                          onClick={() => { handleDownload(selectedItem); setSelectedItem(null); }}
-                          className="flex-1 border border-gray-300 text-gray-700 py-4 px-6 rounded-xl font-semibold hover:bg-gray-50 transition-all flex items-center justify-center gap-3"
-                        >
-                          <Download className="w-5 h-5" />
-                          Download PDF
-                        </button>
-                      )}
+                        )}
                     </div>
                   </div>
                 </div>

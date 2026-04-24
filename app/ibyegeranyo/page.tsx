@@ -297,21 +297,21 @@ export default function DocumentariesPage() {
         {/* Header */}
         <div className="text-center mb-12">
           <div className="flex justify-center mb-6">
-            <div className="w-20 h-20 bg-gradient-to-r from-green-600 to-blue-600 rounded-2xl flex items-center justify-center shadow-2xl">
+            <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center shadow-2xl">
               <Film className="w-10 h-10 text-white" />
             </div>
           </div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent mb-4">
-            Ibyegeranyo
-          </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Explore the world through captivating documentaries from every
-            corner of the globe
+          <div className="text-3xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent mb-3">
+            <h1>IBYEGERANYO</h1>
+          </div>
+          <p className="text-md text-gray-900 max-w-2xl mx-auto">
+            Sura kandi umenye isi binyuze mu mafilimi maremare y’inyandiko
+            (documentaries) ashimishije aturuka mu mpande zose z’isi.
           </p>
         </div>
 
         {/* Stats Section */}
-        <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           <StatCard
             icon={Film}
             label="Documentaries"
@@ -341,7 +341,7 @@ export default function DocumentariesPage() {
               </div>
               <input
                 type="text"
-                placeholder="Search documentaries or directors..."
+                placeholder="Shaka documentaries cyangwa abazitanga..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
@@ -372,10 +372,10 @@ export default function DocumentariesPage() {
                   onChange={(e) => setSortBy(e.target.value)}
                   className="appearance-none bg-white border border-gray-300 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-green-500"
                 >
-                  <option value="newest">Newest First</option>
-                  <option value="oldest">Oldest First</option>
-                  <option value="views">Most Views</option>
-                  <option value="title">Title A-Z</option>
+                  <option value="newest">Ibishya mbere</option>
+                  <option value="oldest">Ibishaje mbere</option>
+                  <option value="views">Ibyarebwe cyane</option>
+                  <option value="title">Kuva kuri A-Z</option>
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
               </div>
@@ -405,10 +405,10 @@ export default function DocumentariesPage() {
               <Search className="w-12 h-12 text-gray-400" />
             </div>
             <h3 className="text-2xl font-bold text-gray-900 mb-2">
-              No documentaries found
+             Nta byegeranyo byabonetse
             </h3>
             <p className="text-gray-600">
-              Try adjusting your search or location filters
+              Gerageza guhindura uburyo washakishije cyangwa amafiltire y’aho hantu (location) ukoresha
             </p>
           </div>
         ) : (
@@ -455,14 +455,6 @@ export default function DocumentariesPage() {
                   <div className="absolute bottom-3 left-3 bg-black/75 text-white text-xs px-2 py-1 rounded-full">
                     {doc.duration}
                   </div>
-
-                  <div className="absolute top-3 left-3">
-                    <span className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      {formatLocation(doc.location)}
-                    </span>
-                  </div>
-
                   <div className="absolute top-3 right-3 space-y-2">
                     {doc.is_featured && (
                       <span className="bg-yellow-400 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
@@ -471,7 +463,7 @@ export default function DocumentariesPage() {
                     )}
                     {doc.is_new && (
                       <span className="bg-blue-400 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
-                        New
+                        Inshya
                       </span>
                     )}
                   </div>
