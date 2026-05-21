@@ -9,13 +9,7 @@ import ArticleLikeButton from "@/app/componets/ArticleLikeButton";
 import ClientImage from "@/app/componets/ClientImage";
 import CopyLinkButton from "@/app/componets/CopyLinkButton";
 
-import { headers } from "next/headers";
-
-// In your ArticleDetail component
-const headersList = await headers(); // Note: await here
-const host = headersList.get("host");
-const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-const baseUrl = `${protocol}://${host}`;
+// REMOVED: import { headers } from "next/headers"; - NOT NEEDED
 
 // Type definitions
 interface Article {
@@ -62,6 +56,22 @@ function getValidImageUrl(imageUrl: string | null | undefined): string {
   return DEFAULT_IMAGE;
 }
 
+// Get base URL consistently - works for both build time and runtime
+const getBaseUrl = () => {
+  // For build time (generateMetadata, generateStaticParams)
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+
+  // For local development
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return process.env.NEXT_PUBLIC_SITE_URL;
+  }
+
+  // Fallback for localhost
+  return "http://localhost:3000";
+};
+
 // SEO Metadata generation
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
@@ -70,7 +80,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .from("articles")
     .select("title, description, image_url")
     .eq("id", id)
-    .maybeSingle(); // Changed to maybeSingle
+    .maybeSingle();
 
   if (error || !data) {
     return {
@@ -94,9 +104,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description: data.description || `Read ${data.title} by our author`,
       images: [getValidImageUrl(data.image_url)],
     },
-    metadataBase: new URL(
-      process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
-    ),
+    metadataBase: new URL(getBaseUrl()),
   };
 }
 
@@ -106,7 +114,7 @@ export async function generateStaticParams() {
     .from("articles")
     .select("id")
     .order("created_at", { ascending: false })
-    .limit(50); // Limit to 50 most recent
+    .limit(50);
 
   if (error) {
     console.error("Error generating static params:", error.message);
@@ -127,6 +135,7 @@ function logServerError(context: string, error: any) {
 
 export default async function ArticleDetail({ params }: Props) {
   const { id } = await params;
+  const baseUrl = getBaseUrl();
 
   try {
     // OPTIMIZATION: Run all queries in parallel
@@ -241,96 +250,88 @@ export default async function ArticleDetail({ params }: Props) {
                 day: "numeric",
               })}
             </span>
-            <span>•</span>
           </div>
 
           {/* Like Button and Social Icons */}
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-4">
-              <ArticleLikeButton
-                articleId={article.id}
-                initialCount={articleWithCounts.like_count}
-              />
+            <ArticleLikeButton
+              articleId={article.id}
+              initialCount={articleWithCounts.like_count}
+            />
 
-              {/* Social Media Share Icons */}
-              <div className="flex space-x-3">
-                {/* Facebook */}
-                <a
-                  href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
-                    `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/articles/${article.id}`,
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-gray-600 hover:text-blue-600 transition-colors"
-                  aria-label="Share on Facebook"
-                >
-                  <img
-                    src="/facebook.svg"
-                    width={20}
-                    height={20}
-                    alt="Facebook"
-                  />
-                </a>
+            {/* Social Media Share Icons */}
+            <div className="flex space-x-3">
+              {/* Facebook */}
+              <a
+                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+                  `${baseUrl}/articles/${article.id}`,
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-600 hover:text-blue-600 transition-colors"
+                aria-label="Share on Facebook"
+              >
+                <img
+                  src="/facebook.svg"
+                  width={20}
+                  height={20}
+                  alt="Facebook"
+                />
+              </a>
 
-                {/* YouTube */}
-                <a
-                  href="https://www.youtube.com/@RedBlueJD"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-gray-600 hover:text-red-600 transition-colors"
-                  aria-label="YouTube"
-                >
-                  <img
-                    src="/youtube.svg"
-                    width={20}
-                    height={20}
-                    alt="YouTube"
-                  />
-                </a>
+              {/* YouTube */}
+              <a
+                href="https://www.youtube.com/@RedBlueJD"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-600 hover:text-red-600 transition-colors"
+                aria-label="YouTube"
+              >
+                <img src="/youtube.svg" width={20} height={20} alt="YouTube" />
+              </a>
 
-                {/* X (Twitter) */}
-                <a
-                  href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(
-                    `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/articles/${article.id}`,
-                  )}&text=${encodeURIComponent(article.title)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-gray-600 hover:text-black transition-colors"
-                  aria-label="Share on X"
-                >
-                  <img src="/x.svg" width={20} height={20} alt="X (Twitter)" />
-                </a>
+              {/* X (Twitter) */}
+              <a
+                href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(
+                  `${baseUrl}/articles/${article.id}`,
+                )}&text=${encodeURIComponent(article.title)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-600 hover:text-black transition-colors"
+                aria-label="Share on X"
+              >
+                <img src="/x.svg" width={20} height={20} alt="X (Twitter)" />
+              </a>
 
-                {/* TikTok */}
-                <a
-                  href="https://tiktok.com/@redblue_jd"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-gray-600 hover:text-pink-600 transition-colors"
-                  aria-label="TikTok"
-                >
-                  <img src="/tiktok.svg" width={20} height={20} alt="TikTok" />
-                </a>
+              {/* TikTok */}
+              <a
+                href="https://tiktok.com/@redblue_jd"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-600 hover:text-pink-600 transition-colors"
+                aria-label="TikTok"
+              >
+                <img src="/tiktok.svg" width={20} height={20} alt="TikTok" />
+              </a>
 
-                {/* Instagram */}
-                <a
-                  href="https://instagram.com/redbluejd"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-gray-600 hover:text-purple-600 transition-colors"
-                  aria-label="Instagram"
-                >
-                  <img
-                    src="/instagram.svg"
-                    width={20}
-                    height={20}
-                    alt="Instagram"
-                  />
-                </a>
+              {/* Instagram */}
+              <a
+                href="https://instagram.com/redbluejd"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-600 hover:text-purple-600 transition-colors"
+                aria-label="Instagram"
+              >
+                <img
+                  src="/instagram.svg"
+                  width={20}
+                  height={20}
+                  alt="Instagram"
+                />
+              </a>
 
-                {/* Copy Link Button - Client Component */}
-                <CopyLinkButton />
-              </div>
+              {/* Copy Link Button - Client Component */}
+              <CopyLinkButton />
             </div>
           </div>
         </div>
