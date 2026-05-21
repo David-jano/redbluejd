@@ -9,6 +9,14 @@ import ArticleLikeButton from "@/app/componets/ArticleLikeButton";
 import ClientImage from "@/app/componets/ClientImage";
 import CopyLinkButton from "@/app/componets/CopyLinkButton";
 
+import { headers } from "next/headers";
+
+// In your ArticleDetail component
+const headersList = await headers(); // Note: await here
+const host = headersList.get("host");
+const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
+const baseUrl = `${protocol}://${host}`;
+
 // Type definitions
 interface Article {
   id: string;
@@ -321,9 +329,7 @@ export default async function ArticleDetail({ params }: Props) {
                 </a>
 
                 {/* Copy Link Button - Client Component */}
-                <CopyLinkButton
-                  url={`${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/articles/${article.id}`}
-                />
+                <CopyLinkButton />
               </div>
             </div>
           </div>
