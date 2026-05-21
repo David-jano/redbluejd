@@ -2,9 +2,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import ClientImage from "../componets/ClientImage";
 import { supabase } from "@/lib/supabase";
+import { supabaseAuth } from "@/lib/auth-client";
+// Add this at the top of the file with other imports
 import {
   FaEye,
   FaEdit,
@@ -31,6 +33,7 @@ import {
   FaFilm,
   FaComment,
   FaVideo,
+  FaSignOutAlt,
 } from "react-icons/fa";
 
 // Types
@@ -45,7 +48,7 @@ interface Comment {
 }
 
 interface Article {
-  id: string; // Change from 'number' to 'string'
+  id: string;
   title: string;
   author: string;
   label: string;
@@ -77,6 +80,13 @@ function getValidImageUrl(imageUrl: string | null | undefined): string {
 }
 
 export default function AdminDashboard() {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Auth state
+  const [user, setUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
   // Article form state
   const [formData, setFormData] = useState({
     title: "",
@@ -92,7 +102,6 @@ export default function AdminDashboard() {
   const [uploading, setUploading] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pathname = usePathname();
 
   // Stats and comments
   const [articleCount, setArticleCount] = useState<number>(0);
@@ -105,17 +114,72 @@ export default function AdminDashboard() {
   const [loadingArticles, setLoadingArticles] = useState(false);
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
 
-  // Fetch all data in parallel on mount
+  // Check authentication on mount
   useEffect(() => {
-    fetchAllData();
+    checkAuth();
   }, []);
+
+  const checkAuth = async () => {
+    try {
+      // Get session
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabaseAuth.auth.getSession();
+
+      console.log(
+        "Dashboard - Session check:",
+        session ? "Session exists" : "No session",
+      );
+
+      if (sessionError) {
+        console.error("Session error:", sessionError);
+        setAuthLoading(false);
+        router.push("/admin/login");
+        return;
+      }
+
+      if (!session) {
+        console.log("No session found, redirecting to login");
+        router.push("/admin/login");
+        return;
+      }
+
+      // Get user from session
+      const user = session.user;
+      console.log("User authenticated:", user.email);
+
+      // Get user role from your custom table
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("role")
+        .eq("email", user.email)
+        .single();
+
+      if (userError) {
+        console.log("User not found in custom table, using default role");
+      }
+
+      setUser({ ...user, role: userData?.role || "ADMIN" });
+      setAuthLoading(false);
+      fetchAllData();
+    } catch (err) {
+      console.error("Auth check error:", err);
+      setAuthLoading(false);
+      router.push("/admin/login");
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabaseAuth.auth.signOut();
+    router.push("/admin/login");
+  };
 
   const fetchAllData = async () => {
     setLoadingStats(true);
     setLoadingArticles(true);
 
     try {
-      // Run all queries in parallel
       const [
         articlesCountResult,
         commentsCountResult,
@@ -296,12 +360,6 @@ export default function AdminDashboard() {
   };
 
   const handleEditArticle = (article: Article) => {
-    console.log("=== Edit Article ===");
-    console.log("Article object:", article);
-    console.log("Article ID:", article.id);
-    console.log("ID type:", typeof article.id);
-    console.log("ID length:", article.id?.length);
-
     if (!article.id) {
       console.error("No ID found!");
       return;
@@ -327,17 +385,11 @@ export default function AdminDashboard() {
     try {
       let response;
       if (editingArticle) {
-        console.log("=== Submitting Update ===");
-        console.log("Editing article ID:", editingArticle.id);
-        console.log("Full URL:", `/api/articles/${editingArticle.id}`);
-
         response = await fetch(`/api/articles/${editingArticle.id}`, {
           method: "PUT",
           body: JSON.stringify(formData),
           headers: { "Content-Type": "application/json" },
         });
-
-        console.log("Response status:", response.status);
       } else {
         response = await fetch("/api/articles", {
           method: "POST",
@@ -347,7 +399,6 @@ export default function AdminDashboard() {
       }
 
       const result = await response.json();
-      console.log("Response data:", result);
 
       if (!response.ok) {
         alert("Error: " + (result.error || "Unknown error"));
@@ -366,9 +417,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Update handleDeleteArticle parameter type (around line 300)
   const handleDeleteArticle = async (id: string) => {
-    // Change from number to string
     if (!confirm("Emeza kuvanaho iki gitekerezo?")) return;
 
     try {
@@ -460,12 +509,45 @@ export default function AdminDashboard() {
       href: "/admin/philosophy",
       icon: <FaBible className="text-gray-600" />,
     },
-     {
+    {
       name: "Videos",
       href: "/admin/videos",
       icon: <FaVideo className="text-gray-600" />,
     },
   ];
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="inline-flex items-center gap-3">
+            <svg
+              className="animate-spin h-8 w-8 text-orange-500"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              ></circle>
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
+            </svg>
+            <span className="text-gray-600">Loading dashboard...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -481,9 +563,19 @@ export default function AdminDashboard() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-500">Welcome, RedBlue JD</span>
+              <span className="text-sm text-gray-500">
+                Welcome, {user?.email?.split("@")[0] || "Admin"}
+              </span>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                title="Logout"
+              >
+                <FaSignOutAlt />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
               <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white font-semibold">
-                JD
+                {user?.email?.charAt(0).toUpperCase() || "A"}
               </div>
             </div>
           </div>
@@ -584,9 +676,10 @@ export default function AdminDashboard() {
           </div>
         </aside>
 
-        {/* Main Content */}
+        {/* Main Content - Same as before, just wrapped */}
         <main className="flex-1 ml-64 p-8">
           <div className="max-w-6xl mx-auto">
+            {/* Rest of your existing JSX remains exactly the same */}
             {/* Breadcrumb Navigation */}
             <nav className="mb-8 mt-10">
               <ol

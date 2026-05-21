@@ -7,6 +7,7 @@ import { FaHome, FaComments } from "react-icons/fa";
 import ArticleComments from "@/app/componets/ArticleComments";
 import ArticleLikeButton from "@/app/componets/ArticleLikeButton";
 import ClientImage from "@/app/componets/ClientImage";
+import CopyLinkButton from "@/app/componets/CopyLinkButton";
 
 // Type definitions
 interface Article {
@@ -217,12 +218,13 @@ export default async function ArticleDetail({ params }: Props) {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div className="flex items-center flex-wrap gap-2 text-sm text-gray-600">
             <span>
-              Yasubiwemo: <span className="font-medium">{article.author}</span>
+              Yanditswe: <span className="font-medium">{article.author}</span>
             </span>
             <span>•</span>
             <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full text-xs font-semibold uppercase">
               {article.label}
             </span>
+            <span>•</span>
 
             <span>
               {new Date(article.created_at).toLocaleDateString("rw-RW", {
@@ -236,68 +238,93 @@ export default async function ArticleDetail({ params }: Props) {
 
           {/* Like Button and Social Icons */}
           <div className="flex items-center gap-4">
-            <ArticleLikeButton
-              articleId={article.id}
-              initialCount={articleWithCounts.like_count}
-            />
+            <div className="flex items-center gap-4">
+              <ArticleLikeButton
+                articleId={article.id}
+                initialCount={articleWithCounts.like_count}
+              />
 
-            {/* Social Media Icons - Using regular img tags for simplicity */}
-            <div className="flex space-x-3">
-              <a
-                href="https://www.facebook.com/RedBlueJD"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-600 hover:text-blue-600 transition-colors"
-                aria-label="Facebook"
-              >
-                <img
-                  src="/facebook.svg"
-                  width={20}
-                  height={20}
-                  alt="Facebook"
+              {/* Social Media Share Icons */}
+              <div className="flex space-x-3">
+                {/* Facebook */}
+                <a
+                  href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+                    `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/articles/${article.id}`,
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-600 hover:text-blue-600 transition-colors"
+                  aria-label="Share on Facebook"
+                >
+                  <img
+                    src="/facebook.svg"
+                    width={20}
+                    height={20}
+                    alt="Facebook"
+                  />
+                </a>
+
+                {/* YouTube */}
+                <a
+                  href="https://www.youtube.com/@RedBlueJD"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-600 hover:text-red-600 transition-colors"
+                  aria-label="YouTube"
+                >
+                  <img
+                    src="/youtube.svg"
+                    width={20}
+                    height={20}
+                    alt="YouTube"
+                  />
+                </a>
+
+                {/* X (Twitter) */}
+                <a
+                  href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(
+                    `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/articles/${article.id}`,
+                  )}&text=${encodeURIComponent(article.title)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-600 hover:text-black transition-colors"
+                  aria-label="Share on X"
+                >
+                  <img src="/x.svg" width={20} height={20} alt="X (Twitter)" />
+                </a>
+
+                {/* TikTok */}
+                <a
+                  href="https://tiktok.com/@redblue_jd"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-600 hover:text-pink-600 transition-colors"
+                  aria-label="TikTok"
+                >
+                  <img src="/tiktok.svg" width={20} height={20} alt="TikTok" />
+                </a>
+
+                {/* Instagram */}
+                <a
+                  href="https://instagram.com/redbluejd"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-600 hover:text-purple-600 transition-colors"
+                  aria-label="Instagram"
+                >
+                  <img
+                    src="/instagram.svg"
+                    width={20}
+                    height={20}
+                    alt="Instagram"
+                  />
+                </a>
+
+                {/* Copy Link Button - Client Component */}
+                <CopyLinkButton
+                  url={`${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/articles/${article.id}`}
                 />
-              </a>
-              <a
-                href="https://www.youtube.com/@RedBlueJD"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-600 hover:text-red-600 transition-colors"
-                aria-label="YouTube"
-              >
-                <img src="/youtube.svg" width={20} height={20} alt="YouTube" />
-              </a>
-              <a
-                href="https://twitter.com/RedBlueJD"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-600 hover:text-black transition-colors"
-                aria-label="X (Twitter)"
-              >
-                <img src="/x.svg" width={20} height={20} alt="X (Twitter)" />
-              </a>
-              <a
-                href="https://tiktok.com/@redblue_jd"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-600 hover:text-pink-600 transition-colors"
-                aria-label="TikTok"
-              >
-                <img src="/tiktok.svg" width={20} height={20} alt="TikTok" />
-              </a>
-              <a
-                href="https://instagram.com/redbluejd"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-600 hover:text-purple-600 transition-colors"
-                aria-label="Instagram"
-              >
-                <img
-                  src="/instagram.svg"
-                  width={20}
-                  height={20}
-                  alt="Instagram"
-                />
-              </a>
+              </div>
             </div>
           </div>
         </div>
