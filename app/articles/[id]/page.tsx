@@ -509,7 +509,7 @@ export default async function ArticleDetail({ params }: Props) {
         {/* Back to Articles Link */}
         <div className="mt-12 text-center">
           <Link
-            href="/articles"
+            href="/"
             className="inline-flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors duration-300 font-medium"
           >
             ← Subira mu nkuru zose
