@@ -252,15 +252,13 @@ export default async function ArticleDetail({ params }: Props) {
             </span>
           </div>
 
-          {/* Like Button and Social Icons */}
-          <div className="flex items-center gap-4">
-            <ArticleLikeButton
-              articleId={article.id}
-              initialCount={articleWithCounts.like_count}
-            />
-
+         <div className="flex items-center gap-4">
+  <ArticleLikeButton
+    articleId={article.id}
+    initialCount={articleWithCounts.like_count || 0}
+  />
             {/* Social Media Share Icons */}
-            <div className="flex space-x-3">
+            <div className="flex items-center space-x-3">
               {/* Facebook */}
               <a
                 href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
@@ -268,7 +266,7 @@ export default async function ArticleDetail({ params }: Props) {
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-gray-600 hover:text-blue-600 transition-colors"
+                className="text-gray-600 hover:text-blue-600 transition-colors inline-flex items-center justify-center"
                 aria-label="Share on Facebook"
               >
                 <img
@@ -279,17 +277,6 @@ export default async function ArticleDetail({ params }: Props) {
                 />
               </a>
 
-              {/* YouTube */}
-              <a
-                href="https://www.youtube.com/@RedBlueJD"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-600 hover:text-red-600 transition-colors"
-                aria-label="YouTube"
-              >
-                <img src="/youtube.svg" width={20} height={20} alt="YouTube" />
-              </a>
-
               {/* X (Twitter) */}
               <a
                 href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(
@@ -297,7 +284,7 @@ export default async function ArticleDetail({ params }: Props) {
                 )}&text=${encodeURIComponent(article.title)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-gray-600 hover:text-black transition-colors"
+                className="text-gray-600 hover:text-black transition-colors inline-flex items-center justify-center"
                 aria-label="Share on X"
               >
                 <img src="/x.svg" width={20} height={20} alt="X (Twitter)" />
@@ -308,7 +295,7 @@ export default async function ArticleDetail({ params }: Props) {
                 href="https://tiktok.com/@redblue_jd"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-gray-600 hover:text-pink-600 transition-colors"
+                className="text-gray-600 hover:text-pink-600 transition-colors inline-flex items-center justify-center"
                 aria-label="TikTok"
               >
                 <img src="/tiktok.svg" width={20} height={20} alt="TikTok" />
@@ -319,7 +306,7 @@ export default async function ArticleDetail({ params }: Props) {
                 href="https://instagram.com/redbluejd"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-gray-600 hover:text-purple-600 transition-colors"
+                className="text-gray-600 hover:text-purple-600 transition-colors inline-flex items-center justify-center"
                 aria-label="Instagram"
               >
                 <img
